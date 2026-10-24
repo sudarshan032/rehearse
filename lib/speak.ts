@@ -1,15 +1,17 @@
 "use client";
 // Free voice for the Voice test, all in the browser: no key, no server, no credits.
-// English: KittenTTS nano 0.8 int8 (https://github.com/KittenML/KittenTTS) on onnxruntime-web, with eSpeak NG
-// phonemes from the `phonemizer` package. Telugu and Hindi: the browser's own speechSynthesis voices
-// (KittenTTS is English only). If KittenTTS cannot load, English falls back to speechSynthesis too.
+// Default: the system's own voices (speechSynthesis): natural, fast to start, and they read Telugu and Hindi.
+// They also report each word as it is spoken, so the page can show the word being said.
+// Optional: NEXT_PUBLIC_VOICE=kitten uses KittenTTS nano 0.8 (https://github.com/KittenML/KittenTTS) for English only;
+// it sounded slow and robotic in real use, so it is off by default.
 //
-//   await preloadVoice();                                  // optional warm-up when the Voice test opens
-//   const { firstSoundMs, engine } = await speak(reply, "en-IN");   // resolves when the first sound plays
+//   await preloadVoice();                                              // optional warm-up when the Voice test opens
+//   const { firstSoundMs, engine, done } = await speak(reply, "en-IN", (i) => showUpTo(i));
 //
 // Model files: `node scripts/get-kitten.mjs` saves them to public/models/kitten/. Missing there, they load from Hugging Face.
 
 export type SpeakLang = "te-IN" | "hi-IN" | "en-IN";
+const KITTEN = process.env.NEXT_PUBLIC_VOICE === "kitten";
 
 // ponytail: onnxruntime-web comes from the CDN (same pinned build as space/telugu-onnx), not the bundle.
 const ORT = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.30.0/dist/";
@@ -166,8 +168,9 @@ function browserVoices(): Promise<SpeechSynthesisVoice[]> {
 }
 
 function pickVoice(all: SpeechSynthesisVoice[], lang: SpeakLang) {
-  // On-device voices first: they start faster than network ones (e.g. Chrome's "Google" voices).
-  const voices = [...all].sort((a, b) => Number(b.localService) - Number(a.localService));
+  // Enhanced/premium voices first (they sound human), then on-device ones (they start faster than network voices).
+  const rank = (v: SpeechSynthesisVoice) => (/enhanced|premium|natural/i.test(v.name) ? 2 : 0) + Number(v.localService);
+  const voices = [...all].sort((a, b) => rank(b) - rank(a));
   const norm = (v: SpeechSynthesisVoice) => v.lang.replace("_", "-").toLowerCase();
   const tries = [lang.toLowerCase(), lang.slice(0, 2), "en-in", "en"];
   for (const t of tries) {
@@ -177,23 +180,39 @@ function pickVoice(all: SpeechSynthesisVoice[], lang: SpeakLang) {
   return undefined;
 }
 
-async function browserSay(text: string, lang: SpeakLang, t0: number) {
+async function browserSay(text: string, lang: SpeakLang, t0: number, onWord?: (end: number) => void) {
   if (typeof speechSynthesis === "undefined") throw new Error("This browser has no built-in voice.");
   const voice = pickVoice(await browserVoices(), lang);
   let finish = () => {};
   const done = new Promise<void>((r) => (finish = r));
   return new Promise<Spoken>((ok, fail) => {
     const u = new SpeechSynthesisUtterance(text);
-    u.onend = () => finish();
+    u.rate = 1.05;
+    // Word timing: the voice reports each word; if it never does, move along at a normal talking speed.
+    let heardBoundary = false, guess = 0;
+    u.onboundary = (e) => {
+      if (e.name && e.name !== "word") return;
+      heardBoundary = true;
+      const m = text.slice(e.charIndex).match(/^\S+/);
+      onWord?.(e.charIndex + (m?.[0].length ?? 0));
+    };
+    u.onend = () => {
+      clearInterval(guess);
+      onWord?.(text.length);
+      finish();
+    };
     u.lang = voice?.lang ?? lang;
     if (voice) u.voice = voice;
     const timer = setTimeout(() => fail(new Error("The browser voice did not start. Click the page once, then try again.")), 8000);
     u.onstart = () => {
       clearTimeout(timer);
-      ok({ firstSoundMs: performance.now() - t0, engine: `Browser voice (${voice?.name ?? lang})`, done });
+      const at = performance.now();
+      guess = window.setInterval(() => !heardBoundary && onWord?.(Math.round(((performance.now() - at) / 1000) * 15)), 120);
+      ok({ firstSoundMs: performance.now() - t0, engine: `System voice (${voice?.name ?? lang})`, done });
     };
     u.onerror = (e) => {
       clearTimeout(timer);
+      clearInterval(guess);
       finish();
       fail(new Error(`The browser voice failed (${e.error}).`));
     };
@@ -204,22 +223,23 @@ async function browserSay(text: string, lang: SpeakLang, t0: number) {
 type Spoken = { firstSoundMs: number; engine: string; done: Promise<void> };
 
 /** Speak a reply. Resolves when the first sound starts playing (time it with firstSoundMs); `done` resolves when it ends. */
-export async function speak(text: string, lang: SpeakLang): Promise<Spoken> {
+export async function speak(text: string, lang: SpeakLang, onWord?: (end: number) => void): Promise<Spoken> {
   const t0 = performance.now();
   stopAll();
   const clean = text.replace(/\p{Extended_Pictographic}/gu, "").replace(/\s+/g, " ").trim();
   if (!clean) throw new Error("Nothing to say.");
-  if (lang !== "en-IN") return browserSay(clean, lang, t0);
+  if (lang !== "en-IN" || !KITTEN) return browserSay(clean, lang, t0, onWord);
   try {
     return await kittenSay(clean, t0);
   } catch (e) {
     if (e instanceof Error && /^(The browser blocked|Stopped)/.test(e.message)) throw e;
-    const r = await browserSay(clean, lang, t0); // KittenTTS could not load: use the built-in voice
+    const r = await browserSay(clean, lang, t0, onWord); // KittenTTS could not load: use the built-in voice
     return { ...r, engine: `${r.engine}, KittenTTS failed` };
   }
 }
 
 /** Optional warm-up: download and load the KittenTTS model before the first reply. */
 export async function preloadVoice(): Promise<void> {
-  await loadKitten();
+  if (KITTEN) await loadKitten();
+  else if (typeof speechSynthesis !== "undefined") await browserVoices();
 }

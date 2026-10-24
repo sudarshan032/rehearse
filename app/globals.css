@@ -289,3 +289,12 @@ body.listening .tries{opacity:0}
   .cap .hl,.cap .lang{display:none} .cap b{white-space:normal;font-size:14px} .cap q{max-width:100%;font-size:14px}
   .script{padding:20px} .said{font-size:16px;line-height:26px}
 }
+/* voice test conversation: scrolls itself, shows the word being spoken */
+.convo{max-height:34vh;overflow-y:auto;scrollbar-width:thin;padding:4px 6px;mask-image:linear-gradient(transparent,#000 24px)}
+.convo .todo{color:var(--faint);transition:color .15s}
+.convo .live-line p{color:var(--muted);font-style:italic}
+.teach{max-width:560px;text-align:center;font-size:14px;line-height:1.6;color:var(--muted);margin-top:14px}
+.teach b{color:var(--ink);font-weight:600} .teach i{color:var(--accent)}
+.micbtn.listening,.micbtn.thinking,.micbtn.speaking{width:68px;height:68px;margin:8px 0 2px} .micbtn:not(.off) .ic{width:26px;height:26px}
+.convo{max-height:42vh}
+.scene .live{flex:none}

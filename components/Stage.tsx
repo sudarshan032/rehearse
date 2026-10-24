@@ -10,7 +10,18 @@ import { Flow } from "./Flow";
 
 type Scene = "describe" | "questions" | "building" | "blueprint" | "rules" | "knowledge" | "prompt" | "stack" | "call" | "fix" | "voice" | "export" | "bots";
 type Broken = { rule_id: string; quote: string; why: string };
-type Line = { role: "caller" | "bot"; text: string; step_id?: string; broken?: Broken[]; ended?: boolean; fixed?: boolean };
+type Line = { role: "caller" | "bot"; text: string; step_id?: string; broken?: Broken[]; ended?: boolean; fixed?: boolean; cut?: number };
+type SRClass = new () => {
+  lang: string; interimResults: boolean; continuous: boolean;
+  onresult: (e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void; onerror: () => void;
+  start(): void; stop(): void; abort(): void;
+};
+type Call = {
+  stream: MediaStream; ac: AudioContext; an: AnalyserNode; history: Line[];
+  phase: "listening" | "thinking" | "speaking"; since: number; lang: string;
+  rec?: MediaRecorder; sr?: InstanceType<SRClass>; onClip?: (b: Blob) => void;
+};
+const srLang = (l: string) => (l === "te" ? "te-IN" : l === "hi" ? "hi-IN" : "en-IN");
 type Target = { kind: "step" | "rule" | "knowledge" | "prompt" | "turn"; id?: string; text?: string; label: string };
 type EditResult = { bot: Bot; summary: string; changed: { steps: string[]; rules: string[]; knowledge: string[] }; applied: number };
 type Timing = { hear: number; think: number; speak: number; total: number; left?: string };
@@ -80,14 +91,9 @@ const INTROS = [
 ].map((x) => ({ ...x, words: x.said.split(" ").map((w) => [w.replace(/^~/, ""), w.startsWith("~")] as [string, boolean]) }));
 
 const langOf = (s: string) => (/[ఀ-౿]/.test(s) ? "TE" : /[ऀ-ॿ]/.test(s) ? "HI" : "EN");
-// The voice follows the script most of the reply is written in ("Hi! … English, हिंदी, or తెలుగు?" is English).
-const ttsLang = (s: string, bot: Bot): SpeakLang => {
-  const n = (re: RegExp) => s.match(re)?.length ?? 0;
-  const [te, hi, en] = [n(/[ఀ-౿]/g), n(/[ऀ-ॿ]/g), n(/[a-z]/gi)];
-  if (te > hi && te > en) return "te-IN";
-  if (hi > te && hi > en) return "hi-IN";
-  return bot.languages.includes("en") || en ? "en-IN" : (bot.persona.voice.lang as SpeakLang);
-};
+// Any Telugu or Hindi letters → that language's system voice (it reads the English words in the reply too).
+const ttsLang = (s: string, bot: Bot): SpeakLang =>
+  /[ఀ-౿]/.test(s) ? "te-IN" : /[ऀ-ॿ]/.test(s) ? "hi-IN" : bot.languages.includes("en") || /[a-z]/i.test(s) ? "en-IN" : (bot.persona.voice.lang as SpeakLang);
 const undoRe = /^(undo|undo that|undo it|revert|wapas karo)\b/i;
 const replayRe = /^(replay|replay (it|that|the turn)|try (it )?again|again)\b/i;
 const backRe = /^(back|go back|previous|wapas|venakki)\.?$/i;
@@ -141,7 +147,14 @@ export default function Stage() {
   const [timing, setTiming] = useState<Timing | null>(null);
   const [live, setLive] = useState<"off" | "listening" | "thinking" | "speaking">("off");
   const [vlines, setVlines] = useState<Line[]>([]);
-  const call = useRef<{ stream: MediaStream; ac: AudioContext; an: AnalyserNode; rec?: MediaRecorder; history: Line[] } | null>(null);
+  const call = useRef<Call | null>(null);
+  const [interim, setInterim] = useState("");
+  const [spoken, setSpoken] = useState(0);
+  const spokenRef = useRef(0);
+  const [barge, setBarge] = useState(true);
+  const bargeRef = useRef(true);
+  bargeRef.current = barge;
+  const convoEl = useRef<HTMLDivElement>(null);
   const raf = useRef(0);
   const micEl = useRef<HTMLButtonElement>(null);
   const [theme, setTheme] = useState("light");
@@ -227,6 +240,12 @@ export default function Stage() {
     const t = setInterval(() => setIx((i) => (i + 1) % INTROS.length), 7000);
     return () => clearInterval(t);
   }, [scene]);
+
+  // The conversation keeps the newest words in view.
+  useEffect(() => {
+    const el = convoEl.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  }, [vlines, interim, spoken]);
 
   // Leaving the Voice test hangs up the call.
   useEffect(() => {
@@ -481,8 +500,9 @@ export default function Stage() {
 
   // ---------- voice test (real mic → Whisper → LLM → free voice) ----------
   // ---------- voice test: a live, hands-free call ----------
-  // Start once; then it loops: listen → you stop talking → Whisper → the bot → it speaks → listen again.
-  // The mic is ignored while the bot speaks, so it never hears itself.
+  // Start once; then it loops: listen → you pause → Whisper → the bot → it speaks → listen again.
+  // One loop watches the mic the whole call: it ends your turn when you pause, and while the bot talks it
+  // listens for you cutting in (barge-in) and stops the bot, like a real phone call.
   async function callStart() {
     if (!bot || call.current) return;
     let stream: MediaStream;
@@ -496,13 +516,15 @@ export default function Stage() {
     const an = ac.createAnalyser();
     an.fftSize = 1024;
     ac.createMediaStreamSource(stream).connect(an);
-    call.current = { stream, ac, an, history: [] };
+    const c: Call = { stream, ac, an, history: [], phase: "thinking", since: performance.now(), lang: srLang(bot.languages[0]) };
+    call.current = c;
     setVlines([]);
+    setInterim("");
     setTiming(null);
-    say("", "Call started. Talk when the bot stops.");
+    watch(c);
     const start = bot.flow.steps.find((x) => x.kind === "start") ?? bot.flow.steps[0];
     await botSays(start.says, start.id, false);
-    listen();
+    if (c.phase === "speaking") listen(c);
   }
 
   function callEnd(msg = "Call ended") {
@@ -514,75 +536,127 @@ export default function Stage() {
       c.rec.onstop = null;
       c.rec.stop();
     }
+    c.sr?.abort();
     c.stream.getTracks().forEach((t) => t.stop());
     c.ac.close().catch(() => {});
     stopSpeaking();
     setLive("off");
+    setInterim("");
     say("", msg);
   }
 
-  function listen() {
-    const c = call.current;
-    if (!c) return;
-    setLive("listening");
-    const rec = new MediaRecorder(c.stream);
-    const chunks: Blob[] = [];
-    rec.ondataavailable = (e) => chunks.push(e.data);
-    c.rec = rec;
+  // The mic loop for the whole call.
+  // ponytail: energy-based turn taking (pause of 750 ms ends your turn); swap in a VAD model if rooms are noisy.
+  function watch(c: Call) {
     const buf = new Float32Array(c.an.fftSize);
-    const began = performance.now();
-    let floor = 0.006, voiced = 0, lastVoice = 0, prev = began;
-    // ponytail: energy-based end of turn (750 ms of quiet after at least 250 ms of speech); a VAD model if rooms are noisy.
+    let floor = 0.006, voiced = 0, lastVoice = 0, prev = performance.now(), echo = 0, phase = c.phase;
     const tick = () => {
-      if (call.current !== c || rec.state !== "recording") return;
+      if (call.current !== c) return;
       c.an.getFloatTimeDomainData(buf);
       const rms = Math.sqrt(buf.reduce((a, v) => a + v * v, 0) / buf.length);
-      const now = performance.now();
-      const loud = rms > Math.max(0.012, floor * 3);
-      if (loud) {
-        voiced += now - prev;
-        lastVoice = now;
-      } else floor = floor * 0.97 + rms * 0.03;
+      const now = performance.now(), dt = now - prev;
       prev = now;
+      if (phase !== c.phase) [phase, echo] = [c.phase, 0];
       micEl.current?.style.setProperty("--lv", Math.min(1, rms * 14).toFixed(2));
-      if (voiced > 250 && now - lastVoice > 750) {
-        rec.onstop = () => onHeard(new Blob(chunks, { type: rec.mimeType }), lastVoice);
-        return rec.stop();
-      }
-      if (!voiced && now - began > 15000) {
-        rec.onstop = () => listen(); // long silence: start a fresh recording so the clip stays small
-        return rec.stop();
-      }
+      if (c.phase === "listening") {
+        if (rms > Math.max(0.012, floor * 3)) [voiced, lastVoice] = [voiced + dt, now];
+        else floor = floor * 0.97 + rms * 0.03;
+        if (voiced > 250 && now - lastVoice > 750) {
+          voiced = 0;
+          endTurn(c, lastVoice);
+        } else if (!voiced && now - c.since > 15000) restartRec(c); // long silence: keep the clip small
+      } else if (c.phase === "speaking" && bargeRef.current) {
+        // The bot's own voice comes back through the mic; only a voice clearly louder than that counts as you.
+        if (now - c.since < 350 || rms < Math.max(0.05, echo * 2.2, floor * 5)) {
+          echo = Math.max(echo * 0.995, rms);
+          voiced = Math.max(0, voiced - dt);
+        } else if ((voiced += dt) > 300) {
+          interrupt(c);
+          lastVoice = now;
+        }
+      } else voiced = 0;
       raf.current = requestAnimationFrame(tick);
     };
-    rec.start();
     tick();
   }
 
-  async function onHeard(audio: Blob, endedAt: number) {
-    const c = call.current;
-    if (!c || !bot) return;
+  function listen(c: Call) {
+    if (call.current !== c) return;
+    c.phase = "listening";
+    c.since = performance.now();
+    setLive("listening");
+    setInterim("");
+    const rec = new MediaRecorder(c.stream);
+    const chunks: Blob[] = [];
+    rec.ondataavailable = (e) => chunks.push(e.data);
+    rec.onstop = () => c.onClip?.(new Blob(chunks, { type: rec.mimeType }));
+    c.rec = rec;
+    rec.start();
+    // Live words while you talk, from the browser's own speech recognition (free). Whisper still makes the final text.
+    const SR = (window as unknown as { SpeechRecognition?: SRClass; webkitSpeechRecognition?: SRClass }).SpeechRecognition
+      ?? (window as unknown as { webkitSpeechRecognition?: SRClass }).webkitSpeechRecognition;
+    if (SR) {
+      const sr = new SR();
+      sr.lang = c.lang;
+      sr.interimResults = true;
+      sr.continuous = true;
+      sr.onresult = (e) => setInterim(Array.from(e.results, (r) => r[0].transcript).join(" "));
+      sr.onerror = () => {};
+      try {
+        sr.start();
+        c.sr = sr;
+      } catch {}
+    }
+  }
+
+  function restartRec(c: Call) {
+    c.sr?.abort();
+    c.onClip = () => listen(c);
+    c.rec?.stop();
+  }
+
+  function endTurn(c: Call, endedAt: number) {
+    c.phase = "thinking";
     setLive("thinking");
+    c.sr?.stop();
+    c.onClip = (clip) => onHeard(c, clip, endedAt);
+    c.rec?.stop();
+  }
+
+  function interrupt(c: Call) {
+    stopSpeaking();
+    // Keep only what the bot really said before you cut in.
+    const last = c.history[c.history.length - 1];
+    if (last?.role === "bot") last.cut = Math.max(1, spokenRef.current);
+    setVlines([...c.history]);
+    listen(c);
+  }
+
+  async function onHeard(c: Call, audio: Blob, endedAt: number) {
+    if (!bot || call.current !== c) return;
     micEl.current?.style.setProperty("--lv", "0");
     try {
       const res = await fetch(`/api/stt?langs=${bot.languages.join(",")}`, { method: "POST", headers: { "Content-Type": audio.type || "audio/webm" }, body: audio });
       const stt = await res.json();
       if (!res.ok) throw new Error(stt.error ?? "Could not hear that");
       if (call.current !== c) return;
-      if (!stt.text?.trim()) return listen();
+      if (!stt.text?.trim()) return listen(c);
       const t1 = performance.now();
+      c.lang = srLang(langOf(stt.text).toLowerCase());
       c.history.push({ role: "caller", text: stt.text });
       setVlines([...c.history]);
-      const r = await post<{ reply: string; step_id: string; ended: boolean }>("/api/turn", { bot, history: c.history.slice(0, -1), text: stt.text });
+      setInterim("");
+      const history = c.history.slice(0, -1).map((l) => (l.cut ? { ...l, text: `${l.text.slice(0, l.cut)}… (cut off by the caller)` } : l));
+      const r = await post<{ reply: string; step_id: string; ended: boolean }>("/api/turn", { bot, history, text: stt.text });
       if (call.current !== c) return;
       const t2 = performance.now();
       await botSays(r.reply, r.step_id, r.ended, [endedAt, t1, t2]);
-      if (r.ended) return callEnd("The bot ended the call");
+      if (r.ended && c.phase === "speaking") return callEnd("The bot ended the call");
     } catch (e) {
       if (call.current !== c) return;
       say("", (e as Error).message || "That turn failed. Keep talking.", { err: true });
     }
-    listen();
+    if (c.phase !== "listening") listen(c);
   }
 
   async function botSays(text: string, step_id: string, ended: boolean, t?: [number, number, number]) {
@@ -590,15 +664,24 @@ export default function Stage() {
     if (!c || !bot) return;
     c.history.push({ role: "bot", text, step_id, ended });
     setVlines([...c.history]);
+    spokenRef.current = 0;
+    setSpoken(0);
+    c.phase = "speaking";
+    c.since = performance.now();
     setLive("speaking");
     try {
-      const { firstSoundMs, engine, done } = await speak(text, ttsLang(text, bot));
-      if (t) setTiming({ hear: t[1] - t[0], think: t[2] - t[1], speak: firstSoundMs, total: t[2] - t[0] + firstSoundMs, left: engine });
-      await done;
-      await new Promise((r) => setTimeout(r, 250)); // let the room go quiet before listening again
+      const sp = await speak(text, ttsLang(text, bot), (n) => {
+        spokenRef.current = n;
+        setSpoken(n);
+      });
+      if (t) setTiming({ hear: t[1] - t[0], think: t[2] - t[1], speak: sp.firstSoundMs, total: t[2] - t[0] + sp.firstSoundMs, left: sp.engine });
+      await sp.done;
+      if (c.phase === "speaking") await new Promise((r) => setTimeout(r, 200)); // let the room go quiet
     } catch (e) {
       say("", (e as Error).message || "Voice is off. The reply is shown as text.", { err: true });
     }
+    spokenRef.current = text.length;
+    setSpoken(text.length);
   }
 
   // ---------- the one input ----------
@@ -647,6 +730,8 @@ export default function Stage() {
     if (/^(dark|light)( mode)?$/i.test(t)) return toggleTheme(t.toLowerCase().startsWith("dark") ? "dark" : "light");
     if (scene === "fix" && replayRe.test(t)) return replay(t);
     if (scene === "voice" && stopRe.test(t)) return callEnd();
+    if (/\b(turn off|no|stop|disable)\b.*\binterrupt/i.test(low)) return setBarge(false), say(t, "Interruptions off: the bot finishes every line");
+    if (/\b(turn on|allow|enable|let me)\b.*\binterrupt/i.test(low)) return setBarge(true), say(t, "Interruptions on: talk over the bot to cut in");
     if (scene === "voice" && /\b(start|begin|call|ring)\b.*\b(call|it|me)\b|^(start|call|go)$/i.test(low)) return void callStart();
     if ((scene === "call" || scene === "fix") && stopRe.test(t)) return go("blueprint"), say(t, "Call stopped");
     if (downloadRe.test(t) && bot) {
@@ -848,7 +933,7 @@ export default function Stage() {
   const progIdx = PROGRESS.findIndex(([, s]) => s === (scene === "building" ? "questions" : ["rules", "knowledge", "prompt", "stack"].includes(scene) ? "blueprint" : scene));
   const reach = (s: Scene) => s === "describe" || (s === "questions" ? !!draft?.interview : !!bot && (s !== "fix" || !!fix));
   const u = draft?.interview?.understood;
-  const hints = scene === "voice" && live !== "off" ? ["end the call", "back to the flow"] : scene === "call" && sel ? ["if they ask for a refund, offer a manager callback instead", "replay", "stop the call"] : HINTS[scene];
+  const hints = scene === "voice" && live !== "off" ? ["end the call", barge ? "turn off interruptions" : "let me interrupt"] : scene === "call" && sel ? ["if they ask for a refund, offer a manager callback instead", "replay", "stop the call"] : HINTS[scene];
 
   return (
     <>
@@ -1079,12 +1164,28 @@ export default function Stage() {
               <button ref={micEl} className={`micbtn ${live}`} aria-label={live === "off" ? "Start the call" : "End the call"} onClick={() => (live === "off" ? callStart() : callEnd())}>
                 <I d={live === "off" ? IC.phone : IC.x} />
               </button>
-              <p className="note">{{ off: "Start the call. The bot greets you, then just talk. No buttons until you hang up.", listening: "Listening… talk now. It replies when you pause.", thinking: "Thinking…", speaking: "The bot is speaking…" }[live]}</p>
-              {vlines.length > 0 && (
-                <div className="convo">
-                  {vlines.slice(-3).map((l, i) => (
-                    <div key={vlines.length - 3 + i} className={`sub ${l.role === "caller" ? "me" : ""}`}><small>{l.role === "caller" ? "You · heard by Whisper" : `Bot · step ${stepNo(l.step_id)}`}</small><p>{l.text}</p></div>
-                  ))}
+              <p className="note">{{ off: "Start the call. The bot greets you, then just talk. No buttons until you hang up.", listening: "Listening… it replies when you pause.", thinking: "Thinking…", speaking: barge ? "The bot is speaking. Cut in any time, like a real call." : "The bot is speaking." }[live]}</p>
+              {live === "off" && !vlines.length && (
+                <p className="teach">
+                  <b>How real calls go:</b> people pause, change their mind, and talk over the bot. Try it: start talking while the bot is
+                  mid-sentence and it stops to listen (that is called <i>barge-in</i>). Say “turn off interruptions” to compare. Headphones help.
+                </p>
+              )}
+              {(vlines.length > 0 || interim) && (
+                <div className="convo" ref={convoEl}>
+                  {vlines.map((l, i) => {
+                    const now = l.role === "bot" && i === vlines.length - 1 && live === "speaking";
+                    const upto = l.cut ?? (now ? spoken : l.text.length);
+                    return (
+                      <div key={i} className={`sub ${l.role === "caller" ? "me" : ""}`}>
+                        <small>{l.role === "caller" ? "You" : `Bot · step ${stepNo(l.step_id)}`}{l.cut ? " · cut off by you" : ""}</small>
+                        <p>{l.text.slice(0, upto)}{upto < l.text.length && <span className="todo">{l.text.slice(upto)}</span>}</p>
+                      </div>
+                    );
+                  })}
+                  {(interim || live === "thinking") && (
+                    <div className="sub me live-line"><small>You · live</small><p>{interim || "…"}</p></div>
+                  )}
                 </div>
               )}
               {timing && <div className="big sm"><b>{(timing.total / 1000).toFixed(2)} s</b><span>from the end of your sentence to the bot’s first sound (last turn)</span></div>}
