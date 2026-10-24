@@ -34,3 +34,6 @@ wispr-flow-data-export*
 space/telugu-onnx/web/model/
 *.tsbuildinfo
 .vercel
+
+# Cached voice audio (TTS)
+.cache/
