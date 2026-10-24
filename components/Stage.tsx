@@ -71,11 +71,11 @@ const PREV = /^(please |ok(ay)? |now |just )?((move|go|step) )?(back(ward)?|prev
 // The intro sentence: [word, cut?]. Filler and the self-correction get cut, like Wispr does.
 // Intro examples, one per language. "~" marks a filler word that gets struck out and cut.
 const INTROS = [
-  { said: "~So ~um, I want a bot that ~uh calls ~my ~users, ~actually ~no, my free users in Telugu, and never promises refunds.",
+  { lang: "English", said: "~So ~um, I want a bot that ~uh calls ~my ~users, ~actually ~no, my free users in Telugu, and never promises refunds.",
     steps: ["Greet", "Ask about the limit", "Offer the Pro trial"], rule: "Never promise a refund" },
-  { said: "~Umm, ek reminder bot chahiye jo ~uh, ~matlab, clinic ke patients ko Hindi mein call kare, aur medical advice kabhi na de.",
+  { lang: "Hindi + English", said: "~Umm, ek reminder bot chahiye jo ~uh, ~matlab, clinic ke patients ko Hindi mein call kare, aur medical advice kabhi na de.",
     steps: ["Greet", "Confirm the slot", "Offer a new time"], rule: "Never give medical advice" },
-  { said: "~ఉమ్, నా saree shop కి ~అంటే, ఒక support bot కావాలి, order status చెప్పాలి, discount promise చేయకూడదు.",
+  { lang: "Telugu + English", said: "~ఉమ్, నా saree shop కి ~అంటే, ఒక support bot కావాలి, order status చెప్పాలి, discount promise చేయకూడదు.",
     steps: ["Greet", "Find the order", "Share the status"], rule: "Never promise a discount" },
 ].map((x) => ({ ...x, words: x.said.split(" ").map((w) => [w.replace(/^~/, ""), w.startsWith("~")] as [string, boolean]) }));
 
@@ -106,6 +106,7 @@ const I = ({ d, w = 2 }: { d: string; w?: number }) => (
 );
 const IC = {
   up: '<path d="M12 19V5M5 12l7-7 7 7"/>',
+  stage: '<path d="M3 21V9.5a9 9 0 0 1 18 0V21M3 21h18M9 17v-3M12 18v-6M15 17v-3"/>',
   wave: '<path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4"/>',
   target: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/>',
   shield: '<path d="M12 3l7 3v5c0 4.4-2.9 8-7 10-4.1-2-7-5.6-7-10V6z"/>',
@@ -853,7 +854,7 @@ export default function Stage() {
     <>
       <header className="top">
         <div className="brand" onClick={() => nav("", "home")}>
-          <span className="logo"><I d={IC.wave} w={2.4} /></span>
+          <span className="logo"><I d={IC.stage} w={1.8} /></span>
           <span className="word">Rehearse</span>
         </div>
         <div className="prog">
@@ -874,7 +875,7 @@ export default function Stage() {
       </header>
 
       <nav className={`journey ${panel ? "" : "closed"}`} aria-label="Where you are">
-        <div className="jt">Your path<button onClick={() => setPanel(!panel)} aria-label={panel ? "Hide the path" : "Show the path"}>{panel ? "‹" : "›"}</button></div>
+        <div className="jt">Running order<button onClick={() => setPanel(!panel)} aria-label={panel ? "Hide the path" : "Show the path"}>{panel ? "‹" : "›"}</button></div>
         {JOURNEY.map((j) => {
           const here = scene === j.s || (scene === "building" && j.s === "questions");
           const ok = j.s === "describe" || j.s === "bots" || (j.s === "questions" ? !!draft?.interview : !!bot && (j.s !== "fix" || !!fix));
@@ -891,23 +892,31 @@ export default function Stage() {
       </nav>
 
       <main>
-        <section className={`scene ${scene === "describe" ? "on" : ""}`}>
-          <div className="eyebrow">Rehearse · build a voice bot by talking</div>
-          {/* 2.5 s intro: messy speech, the filler gets cut, a clean bot comes out. */}
-          <div className="intro" aria-hidden key={ix}>
-            <p className="said">
-              {INTROS[ix].words.map(([w, cut], i) => (
-                <span key={i} className={cut ? "f" : "k"} style={{ ["--i" as string]: i }}>{w} </span>
-              ))}
-            </p>
-            <div className="built">
-              {INTROS[ix].steps.map((x, i) => <span key={x} style={{ ["--i" as string]: i }}>{i > 0 && <i>→</i>}<span>{i + 1} {x}</span></span>)}
-              <b>{INTROS[ix].rule}</b>
+        <section className={`scene hero ${scene === "describe" ? "on" : ""}`}>
+          <div className="herogrid">
+            <div className="herotext">
+              <div className="eyebrow">A rehearsal room for voice bots</div>
+              <h1 className="h1s">Talk your voice bot <em>into shape.</em></h1>
+              <p className="sub0">Say what the bot should do, in English, हिंदी, తెలుగు or a mix. Then rehearse a call, catch the line that breaks a rule, and fix it by saying so.</p>
+              <div className="ctas">
+                <button className="btn" onClick={() => openSample("show me the sample")}>See a finished bot</button>
+                <span>or just start talking below</span>
+              </div>
+            </div>
+            {/* The intro: messy speech on a script page, the filler gets crossed out, a clean bot comes out. */}
+            <div className="script" aria-hidden key={ix}>
+              <div className="scripthead"><span>Take {ix + 1} of {INTROS.length}</span><span>{INTROS[ix].lang}</span></div>
+              <p className="said">
+                {INTROS[ix].words.map(([w, cut], i) => (
+                  <span key={i} className={cut ? "f" : "k"} style={{ ["--i" as string]: i }}>{w} </span>
+                ))}
+              </p>
+              <ol className="built">
+                {INTROS[ix].steps.map((x, i) => <li key={x} style={{ ["--i" as string]: i }}><small>Scene {i + 1}</small>{x}</li>)}
+              </ol>
+              <b className="pencil">{INTROS[ix].rule}!</b>
             </div>
           </div>
-          <h1 className="h1s">What voice bot do you want to build?</h1>
-          <p className="sub0">Talk with Wispr Flow (or type), in English, हिंदी, తెలుగు or a mix. I’ll ask a few questions, then build it.</p>
-          <button className="samplebtn" onClick={() => openSample("show me the sample")}>See a finished sample →</button>
         </section>
 
         <section className={`scene ${scene === "questions" ? "on" : ""}`}>
@@ -936,7 +945,7 @@ export default function Stage() {
         </section>
 
         <section className={`scene ${scene === "building" ? "on" : ""}`}>
-          <h2>Building your bot</h2>
+          <h2>Setting the stage</h2>
           {/* Staged ticks while the AI works (about 2 s), so the wait feels like progress. */}
           <ul className="stages" key={String(scene === "building")}>
             {["Reading what you said", "Drawing the call flow", "Writing the rules", "Collecting the facts", "Compiling the prompt"].map((x, i) => (
