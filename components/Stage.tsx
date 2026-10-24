@@ -37,7 +37,7 @@ const HINTS: Record<Scene, string[]> = {
   bots: ["start a new bot", "open the first one"],
 };
 const PLACEHOLDER: Partial<Record<Scene, string>> = {
-  describe: "Hold fn and describe your bot…",
+  describe: "Describe your bot…",
   questions: "Answer all of them in one go…",
   call: "Speak as the customer…",
   fix: "Say the fix, or “replay”…",
@@ -69,11 +69,15 @@ const NEXT = /^(please |ok(ay)? |now |just )?((move|go) )?(forward|next|onward|a
 const PREV = /^(please |ok(ay)? |now |just )?((move|go|step) )?(back(ward)?|previous|before)( step| page| one)?$|^(wapas|venakki)$/;
 
 // The intro sentence: [word, cut?]. Filler and the self-correction get cut, like Wispr does.
-const INTRO: [string, boolean][] = [
-  ["So", true], ["um,", true], ["I", false], ["want", false], ["a", false], ["bot", false], ["that", false], ["uh", true],
-  ["calls", false], ["my", true], ["users,", true], ["actually", true], ["no,", true], ["my", false], ["free", false], ["users", false],
-  ["in", false], ["Telugu,", false], ["and", false], ["never", false], ["promises", false], ["refunds.", false],
-];
+// Intro examples, one per language. "~" marks a filler word that gets struck out and cut.
+const INTROS = [
+  { said: "~So ~um, I want a bot that ~uh calls ~my ~users, ~actually ~no, my free users in Telugu, and never promises refunds.",
+    steps: ["Greet", "Ask about the limit", "Offer the Pro trial"], rule: "Never promise a refund" },
+  { said: "~Umm, ek reminder bot chahiye jo ~uh, ~matlab, clinic ke patients ko Hindi mein call kare, aur medical advice kabhi na de.",
+    steps: ["Greet", "Confirm the slot", "Offer a new time"], rule: "Never give medical advice" },
+  { said: "~ఉమ్, నా saree shop కి ~అంటే, ఒక support bot కావాలి, order status చెప్పాలి, discount promise చేయకూడదు.",
+    steps: ["Greet", "Find the order", "Share the status"], rule: "Never promise a discount" },
+].map((x) => ({ ...x, words: x.said.split(" ").map((w) => [w.replace(/^~/, ""), w.startsWith("~")] as [string, boolean]) }));
 
 const langOf = (s: string) => (/[ఀ-౿]/.test(s) ? "TE" : /[ऀ-ॿ]/.test(s) ? "HI" : "EN");
 const ttsLang = (s: string, bot: Bot): SpeakLang => (/[ఀ-౿]/.test(s) ? "te-IN" : /[ऀ-ॿ]/.test(s) ? "hi-IN" : bot.languages.includes("en") ? "en-IN" : (bot.persona.voice.lang as SpeakLang));
@@ -115,6 +119,7 @@ export default function Stage() {
   const [busy, setBusy] = useState("");
   const [heard, setHeard] = useState<{ q: string; res: string; err?: boolean; ans?: boolean } | null>(null);
   const [panel, setPanel] = useState(true);
+  const [ix, setIx] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [talk, setTalk] = useState(false); // speak the bot's replies out loud in a rehearsal
   const [changed, setChanged] = useState<EditResult["changed"] & { summary: string } | null>(null);
@@ -203,6 +208,18 @@ export default function Stage() {
     const next = !add && !rest ? `${token} ` : `${base.trimEnd()} ${token} `.trimStart();
     setBox(next);
   }
+
+  // The intro plays the next language example every 7 s while the first screen is open.
+  useEffect(() => {
+    if (scene !== "describe") return;
+    const t = setInterval(() => setIx((i) => (i + 1) % INTROS.length), 7000);
+    return () => clearInterval(t);
+  }, [scene]);
+
+  // On smaller laptop screens the path panel starts as a small tab; opened, it floats over the stage.
+  useEffect(() => {
+    if (innerWidth < 1400) setPanel(false);
+  }, []);
 
   // Restore the bot that was open before a reload.
   useEffect(() => {
@@ -521,7 +538,8 @@ export default function Stage() {
     lastSaid.current = t;
     const stage = SAY_STAGE[scene];
     const pointing = !!sel;
-    const low = t.toLowerCase().replace(/[.!?,]+$/g, "").trim();
+    // Commands work with @mentions still in the box ("@Last reply export" → export).
+    const low = (mentionsIn(t).rest.replace(/\s+/g, " ") || t).toLowerCase().replace(/[.!?,]+$/g, "").trim();
     const words = low.split(/\s+/).length;
 
     if (/^(clear|deselect|unselect|cancel)( (it|that|this|the selection|selection))?$/.test(mentionsIn(low).rest || low)) return setBox(""), say(t, "Cleared");
@@ -786,26 +804,26 @@ export default function Stage() {
             </button>
           );
         })}
-        <div className="jh">Say “go to rules”, “next” or “back”.{past.length > 0 && <> Came from: <b>{JOURNEY.find((j) => j.s === past[past.length - 1])?.name ?? "Questions"}</b></>}</div>
+        <div className="jh">Say “next”, “back” or “go to rules”.</div>
       </nav>
 
-      <main className={panel ? "withpanel" : ""}>
+      <main>
         <section className={`scene ${scene === "describe" ? "on" : ""}`}>
           <div className="eyebrow">Rehearse · build a voice bot by talking</div>
           {/* 2.5 s intro: messy speech, the filler gets cut, a clean bot comes out. */}
-          <div className="intro" aria-hidden>
+          <div className="intro" aria-hidden key={ix}>
             <p className="said">
-              {INTRO.map(([w, cut], i) => (
+              {INTROS[ix].words.map(([w, cut], i) => (
                 <span key={i} className={cut ? "f" : "k"} style={{ ["--i" as string]: i }}>{w} </span>
               ))}
             </p>
             <div className="built">
-              <span>1 Greet</span><i>→</i><span>2 Ask about the limit</span><i>→</i><span>3 Offer the Pro trial</span>
-              <b>Never promise a refund</b>
+              {INTROS[ix].steps.map((x, i) => <span key={x} style={{ ["--i" as string]: i }}>{i > 0 && <i>→</i>}<span>{i + 1} {x}</span></span>)}
+              <b>{INTROS[ix].rule}</b>
             </div>
           </div>
           <h1 className="h1s">What voice bot do you want to build?</h1>
-          <p className="sub0">Hold <kbd>fn</kbd> and talk, in English, हिंदी, తెలుగు or a mix. I’ll ask a few questions, then build it.</p>
+          <p className="sub0">Talk with Wispr Flow (or type), in English, हिंदी, తెలుగు or a mix. I’ll ask a few questions, then build it.</p>
           <button className="samplebtn" onClick={() => openSample("show me the sample")}>See a finished sample →</button>
         </section>
 
@@ -971,14 +989,14 @@ export default function Stage() {
                 <I d={IC.mic} />
               </button>
               <p className="note">{rec ? "Listening… let go (or click again) when you finish" : "Hold the button, or click to start and click to stop, and talk like a real caller"}</p>
-              {lines.length > 0 && (
+              {timing && lines.length > 0 && (
                 <div className="vlines">
                   {lines.slice(-2).map((l, i) => (
                     <div key={i} className={`sub ${l.role === "caller" ? "me" : ""}`}><small>{l.role === "caller" ? "You · heard by Whisper" : `Bot · ${timing?.left ?? "voice"}`}</small><p>{l.text}</p></div>
                   ))}
                 </div>
               )}
-              <div className="big"><b>{timing ? `${(timing.total / 1000).toFixed(2)} s` : "0.00 s"}</b><span>from letting go to the bot’s first sound</span></div>
+              {timing && <div className="big"><b>{(timing.total / 1000).toFixed(2)} s</b><span>from letting go to the bot’s first sound</span></div>}
               {timing && (
                 <>
                   <div className="bar">
@@ -1005,12 +1023,12 @@ export default function Stage() {
               <div className="xg x5">
                 {EXPORTS.map((x, i) => (
                   <button key={x.id} className={`x ${i === 0 ? "on" : ""}`} style={{ ["--d" as string]: `${i * 0.06}s` }} onClick={() => exportAs(x.id)}>
-                    <b>{x.name}</b><small>{x.note}</small><em><I d={IC.dl} />say “download {x.name.toLowerCase()}”</em>
+                    <b>{x.name}</b><small>{x.note}</small><em><I d={IC.dl} />“download {x.id}”</em>
                   </button>
                 ))}
               </div>
               <div className="stats" style={{ gridTemplateColumns: "repeat(3,1fr)" }}>
-                <div><b>v{bot.version}</b><small>versions</small></div>
+                <div><b>v{bot.version}</b><small>version</small></div>
                 <div><b>{bot.flow.steps.length}</b><small>steps</small></div>
                 <div><b>{bot.rules.length}</b><small>rules</small></div>
               </div>

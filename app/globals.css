@@ -35,7 +35,7 @@ h2{font:800 clamp(28px,4vw,48px)/1.02 var(--display);letter-spacing:-.04em;text-
 .bigq b{font:700 clamp(19px,2.3vw,25px)/1.25 var(--display);letter-spacing:-.01em} .qa{font-size:16.5px;color:var(--muted);margin-top:2px}
 .bigq li.ok .qn{background:var(--accent);border-color:var(--accent);color:var(--on-accent);transform:scale(1.05)} .bigq li.ok .qa{color:var(--accent);font-weight:600;animation:in .45s both}
 .flowbig{width:min(1000px,100%);overflow-x:auto} .flowbig svg{display:block;width:100%;min-width:640px;height:auto;overflow:visible}
-.minimap{width:min(620px,100%);margin:10px 0 4px} .minimap svg{display:block;width:100%;height:auto;overflow:visible}
+.minimap{width:min(760px,100%);margin:10px 0 4px} .minimap svg{display:block;width:100%;height:auto;overflow:visible}
 .tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;width:min(900px,100%);margin-top:8px}
 .tile{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:12px 14px;text-align:left;box-shadow:var(--sh);transition:transform .2s;animation:in .5s both;animation-delay:var(--d,0s)}
 .tile:hover{transform:translateY(-2px)} .tile b{font:800 20px var(--display);display:block;letter-spacing:-.02em} .tile span{font-size:13px;color:var(--muted);display:block} .tile small{font:500 11px var(--mono);color:var(--accent)}
@@ -184,8 +184,6 @@ body.listening .tries{opacity:0}
 /* collapsible path panel */
 .journey .jt{display:flex;align-items:center;justify-content:space-between}
 .journey .jt button{padding:2px 8px;font:700 16px var(--body);color:var(--muted)}
-.journey.closed{width:auto}
-.journey.closed button:not(.jt button),.journey.closed .jh{display:none}
 @media (min-width:1100px){main{left:0} main.withpanel{left:200px}}
 .n.sel .bx{stroke:var(--warn);stroke-width:3;fill:var(--warn-soft)}
 /* intro: messy speech → filler cut → clean bot (about 2.5 s, once) */
@@ -222,3 +220,31 @@ body.listening .tries{opacity:0}
 .known2{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin-top:14px;width:min(780px,100%)}
 .known2 span{font:600 12.5px var(--body);padding:4px 10px;border-radius:999px;background:var(--chip)}
 .known2 .bad{background:var(--bad-soft);color:var(--bad)} .known2 .ok{background:var(--accent-soft);color:var(--accent)}
+/* layout: the stage is always centred on the screen; the path panel floats over the left gutter */
+main,main.withpanel{left:0;right:0}
+@media (min-width:1100px){.scene{padding-inline:232px}}
+.journey{top:80px;padding:10px 8px 12px;border-radius:18px;background:color-mix(in oklab,var(--panel) 80%,transparent);border:1px solid var(--line);box-shadow:var(--sh);backdrop-filter:blur(8px);transition:transform .35s cubic-bezier(.2,.8,.2,1),opacity .35s;width:190px}
+.journey .jt button{transition:transform .35s}
+.journey .jh{font-size:11.5px}
+/* intro: a new example every 7 s; the chips pop in one by one */
+.intro{min-height:150px;justify-content:center}
+.built span{opacity:0;animation:pop .45s cubic-bezier(.2,.9,.3,1.25) calc(1.95s + var(--i) * .12s) forwards}
+.built b{opacity:0;animation:pop .45s cubic-bezier(.2,.9,.3,1.25) 2.4s forwards}
+.built{opacity:1;transform:none;animation:none}
+.built>span{background:none;border:0;box-shadow:none;padding:0;display:flex;align-items:center;gap:8px}
+.built>span>span{opacity:1;animation:none;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:6px 12px;box-shadow:var(--sh)}
+.scene.on .h1s{animation:rise .7s cubic-bezier(.2,.8,.2,1) .15s both}
+.scene.on .sub0{animation:in .6s .35s both} .scene.on .samplebtn{animation:in .6s .5s both}
+/* a slow moving glow behind the stage */
+body::before{content:"";position:fixed;inset:-20%;z-index:-1;pointer-events:none;background:radial-gradient(40% 35% at 30% 35%,color-mix(in oklab,var(--accent) 10%,transparent),transparent 70%),radial-gradient(35% 30% at 72% 60%,color-mix(in oklab,var(--warn) 8%,transparent),transparent 70%);animation:drift 18s ease-in-out infinite alternate}
+@keyframes drift{to{transform:translate(4%,-3%) scale(1.08)}}
+@keyframes popin{from{opacity:0;transform:scale(.82)}to{opacity:1;transform:none}}
+.built>span{animation-name:popin} .built b{animation-name:popin}
+/* collapsed path panel: just a small tab with the arrow */
+.journey.closed{width:46px;transform:none;opacity:1;padding:8px 4px}
+.journey.closed>button,.journey.closed .jh{display:none}
+.journey.closed .jt{margin:0;justify-content:center;font-size:0;letter-spacing:0}
+.journey{transition:width .3s cubic-bezier(.2,.8,.2,1)}
+.journey .jt{white-space:nowrap;overflow:hidden}
+.n .t{font-size:14.5px}
+@media (min-width:1100px) and (max-width:1399px){.scene{padding-inline:76px}}

@@ -251,9 +251,12 @@ function limitMessage(path: string) {
 /** One LLM call turns the spoken change into ops; code applies them. */
 export async function editBot(bot: Bot, instruction: string, target?: Target) {
   const { data, llm, ms } = await askJSON(EDIT_SYSTEM, editUser(bot, instruction, target), EditPlan);
-  const r = applyOps(bot, data.ops);
+  // A rule is only removed when the user says so; a rule break is fixed by changing the reply.
+  const asked = /\b(drop|remove|delete|cut|scrap|get rid of|no longer|don'?t need|hatao|teeseyi|teesey)\b/i.test(instruction);
+  const ops = asked ? data.ops : data.ops.filter((o) => (o as { op?: string }).op !== "remove_rule");
+  const r = applyOps(bot, ops);
   const summary = r.applied
-    ? data.summary || "Done."
+    ? ops.length < data.ops.length ? "Changed the reply. The rules stay as they are." : data.summary || "Done."
     : data.ops.length
       ? "I couldn't make that change. Try saying it another way."
       : data.summary || "Nothing to change.";

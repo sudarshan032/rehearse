@@ -56,8 +56,8 @@ assert.deepEqual(r.changed, { steps: ["ask_student", "pitch"], rules: ["r2"], kn
 const none = applyOps(bot, [{ op: "remove_rule", id: "r9" }]);
 assert.equal(none.bot, bot);
 assert.equal(none.applied, 0);
-const many = Array.from({ length: 7 }, (_, i) => ({ op: "add_step", id: `s${i}`, label: "x", says: "y" }));
-assert.throws(() => applyOps(bot, many), EditError, "more than 10 steps is refused");
+const many = Array.from({ length: 11 }, (_, i) => ({ op: "add_step", id: `s${i}`, label: "x", says: "y" }));
+assert.throws(() => applyOps(bot, many), EditError, "more than 14 steps is refused");
 
 const g = (stage, text, pointing) => guessIntent(stage, text, pointing)?.intent ?? null;
 assert.deepEqual(guessIntent("blueprint", "show me the rules"), { intent: "navigate", tab: "rules" });
