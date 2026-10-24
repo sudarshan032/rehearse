@@ -105,7 +105,7 @@ export default function Stage() {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState("");
   const [heard, setHeard] = useState<{ q: string; res: string; err?: boolean; ans?: boolean } | null>(null);
-  const [sel, setSel] = useState<Target | null>(null);
+  const [panel, setPanel] = useState(true);
   const [changed, setChanged] = useState<EditResult["changed"] & { summary: string } | null>(null);
   const [undo, setUndo] = useState<Bot[]>([]);
   const [lines, setLines] = useState<Line[]>([]);
@@ -120,11 +120,8 @@ export default function Stage() {
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const media = useRef<MediaRecorder | null>(null);
   const queued = useRef(false);
-  const seen = useRef(new Set<string>()); // texts already put in the box
-  const clip = useRef<string | undefined>(undefined); // last clipboard text we know about
-  const lastInput = useRef(0); // time of the last real input or paste
-
-  const readClip = () => (navigator.clipboard?.readText ? navigator.clipboard.readText().catch(() => undefined) : Promise.resolve(undefined));
+  const lastTurn = useRef(""); // the call turn that broke a rule, for "@Last reply"
+  const clickBase = useRef<{ at: number; text: string }>({ at: 0, text: "" });
 
   // Put dictated text into the box and send it after a short countdown.
   function insert(t: string, how: string) {
@@ -133,7 +130,6 @@ export default function Stage() {
     const v = (el.value.trim() ? el.value.trimEnd() + " " : "") + t.trim();
     el.value = v;
     el.focus({ preventScroll: true });
-    lastInput.current = Date.now();
     setText(v);
     log("insert", { how, len: v.length });
     clearTimeout(timer.current);
@@ -141,6 +137,47 @@ export default function Stage() {
     timer.current = setTimeout(() => handleRef.current(v), 700);
   }
   const bot = draft?.bot;
+
+  // "@Greet", "@Rule 2", "@Fact 1", "@Last reply": parts of the bot named in the box. Changes go to them.
+  const mentionables: (Target & { token: string })[] = bot
+    ? [
+        ...bot.flow.steps.map((x, i) => ({ token: `@${x.label}`, kind: "step" as const, id: x.id, label: `step ${i + 1}` })),
+        ...bot.rules.map((x, i) => ({ token: `@Rule ${i + 1}`, kind: "rule" as const, id: x.id, label: `rule ${i + 1}` })),
+        ...bot.knowledge.map((x, i) => ({ token: `@Fact ${i + 1}`, kind: "knowledge" as const, id: x.id, label: `fact ${i + 1}` })),
+        ...(lastTurn.current ? [{ token: "@Last reply", kind: "turn" as const, id: undefined, text: lastTurn.current, label: "the reply that broke a rule" }] : []),
+      ].sort((a, b) => b.token.length - a.token.length)
+    : [];
+  const mentionsIn = (v: string) => {
+    let rest = v;
+    const found: typeof mentionables = [];
+    for (const m of mentionables)
+      if (rest.includes(m.token)) {
+        found.push(m);
+        rest = rest.split(m.token).join(" ");
+      }
+    found.sort((x, y) => v.indexOf(x.token) - v.indexOf(y.token));
+    return { found, rest: rest.trim() };
+  };
+  const targets = mentionsIn(text).found;
+  const sel = targets[0] ?? null;
+  const setBox = (v: string) => {
+    setText(v);
+    if (inp.current) inp.current.value = v;
+    inp.current?.focus({ preventScroll: true });
+  };
+  const clearMentions = () => setBox(mentionsIn(text).rest);
+  // Click: replace the mention (or add it if you already typed something). Double-click or Shift-click: add.
+  function attach(token: string, add = false, dbl = false) {
+    const now = Date.now();
+    // A double-click starts with two single clicks: undo those and add from where we were.
+    const base = dbl && now - clickBase.current.at < 600 ? clickBase.current.text : text;
+    if (!add && now - clickBase.current.at > 600) clickBase.current = { at: now, text };
+    const { found, rest } = mentionsIn(base);
+    if (!add && !rest && found.length === 1 && found[0].token === token) return setBox("");
+    if (found.some((f) => f.token === token) && add) return setBox(base);
+    const next = !add && !rest ? `${token} ` : `${base.trimEnd()} ${token} `.trimStart();
+    setBox(next);
+  }
 
   // Restore the bot that was open before a reload.
   useEffect(() => {
@@ -171,8 +208,6 @@ export default function Stage() {
       log("paste", { target: (e.target as HTMLElement)?.tagName, inBox: e.target === el, len: t.length });
       if (!el || !t.trim()) return;
       e.preventDefault();
-      if (el.value.includes(t.trim())) return; // already put in from the clipboard
-      seen.current.add(t.trim());
       insert(t, "paste");
     };
     // Typing anywhere goes into the box too.
@@ -182,33 +217,11 @@ export default function Stage() {
       if (e.key.length === 1 && !(document.activeElement instanceof HTMLInputElement)) inp.current?.focus({ preventScroll: true });
     };
     const onBlur = () => log("blur", { to: document.activeElement?.tagName });
-    // Wispr's hands-free shortcut takes the window focus away while you talk. When the focus comes back,
-    // its Cmd+V can arrive before the page is ready and get lost. The words are still on the clipboard
-    // at that moment, so read them from there if nothing was pasted.
-    let blurAt = 0;
-    const onWinBlur = () => {
-      blurAt = Date.now();
-      log("window-blur", { active: document.activeElement?.tagName });
-    };
+    const onWinBlur = () => log("window-blur", { active: document.activeElement?.tagName });
     const onWinFocus = () => {
-      const away = Date.now() - blurAt;
-      log("window-focus", { active: document.activeElement?.tagName, away });
+      log("window-focus", { active: document.activeElement?.tagName });
       refocus();
-      const before = lastInput.current;
-      setTimeout(() => {
-        if (lastInput.current !== before) return; // a real paste arrived
-        readClip().then((t) => {
-          const clean = t?.trim();
-          if (!clean || seen.current.has(clean) || clean === clip.current) return void (clip.current = clean ?? clip.current);
-          clip.current = clean;
-          if (away > 120_000) return; // long absence: probably copied something else
-          log("clipboard-rescue", { len: clean.length, away });
-          seen.current.add(clean);
-          insert(clean, "clipboard");
-        });
-      }, 450);
     };
-    readClip().then((t) => (clip.current = t?.trim()));
     const el = inp.current;
     document.addEventListener("mouseup", refocus);
     document.addEventListener("paste", onPaste, true);
@@ -226,6 +239,14 @@ export default function Stage() {
       el?.removeEventListener("blur", onBlur);
     };
   }, []);
+
+  // The box grows with what you say (up to 40% of the screen) instead of turning into a tiny scroll area.
+  useEffect(() => {
+    const el = inp.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, window.innerHeight * 0.4)}px`;
+  }, [text]);
 
   // After every screen change or finished step, the box gets the focus back.
   useEffect(() => {
@@ -246,7 +267,7 @@ export default function Stage() {
     if (remember) setPast((p) => [...p.slice(-20), scene]);
     setScene(s);
     if (s !== "call" && s !== "fix") setVig("");
-    if (s === "describe") setSel(null);
+    if (s === "describe") setBox("");
   }
   function back() {
     const p = past[past.length - 1];
@@ -315,7 +336,10 @@ export default function Stage() {
     setChanged({ ...r.changed, summary: r.summary });
     say(t, r.summary);
     const wasTurn = sel?.kind === "turn";
-    if (wasTurn) setSel(null); // a pointed step, rule or fact stays selected for more changes
+    // The named step, rule or fact stays in the box for more changes; "@Last reply" is done.
+    const keep = targets.filter((x) => x.kind !== "turn").map((x) => x.token);
+    if (keep.length) setTimeout(() => setBox(keep.join(" ") + " "), 0);
+    if (wasTurn) lastTurn.current = "";
     if (wasTurn || scene === "call") {
       const last = [...lines].reverse().find((l) => l.role === "bot");
       const rule = last?.broken?.[0] && r.bot.rules.findIndex((x) => x.id === last.broken![0].rule_id);
@@ -367,7 +391,9 @@ export default function Stage() {
       const ri = b.rules.findIndex((x) => x.id === broken[0].rule_id);
       const step = b.flow.steps.findIndex((s) => s.id === r.step_id);
       setVig("bad");
-      setSel({ kind: "turn", id: r.step_id, text: `Caller: ${t}\nBot: ${r.reply}`, label: `Fix → step ${step + 1}${ri >= 0 ? ` · rule ${ri + 1}` : ""}` });
+      lastTurn.current = `Caller: ${t}\nBot: ${r.reply}`;
+      setTimeout(() => setBox("@Last reply "), 0);
+      void step;
       say(t, `Broke rule ${ri + 1}. Say the fix.`);
     } else say(t, r.ended ? "Call ended" : "Bot replied · rules kept");
     return done;
@@ -382,7 +408,6 @@ export default function Stage() {
     if (res && !res.broken?.length) {
       setLines((ls) => ls.map((l, k) => (k === ls.length - 1 ? { ...l, fixed: true } : l)));
       setVig("good");
-      setSel(null);
       say(t, "Replayed with the fix · rule kept");
     }
   }
@@ -458,13 +483,15 @@ export default function Stage() {
       return;
     }
     setText("");
-    log("said", { scene, text: t });
+    log("said", { scene, text: t, targets: targets.map((x) => x.token) });
     const stage = SAY_STAGE[scene];
     const pointing = !!sel;
     const low = t.toLowerCase().replace(/[.!?,]+$/g, "").trim();
     const words = low.split(/\s+/).length;
 
-    if (/^(clear|deselect|unselect|cancel)( (it|that|this|the selection|selection))?$/.test(low)) return setSel(null), say(t, "Cleared");
+    if (/^(clear|deselect|unselect|cancel)( (it|that|this|the selection|selection))?$/.test(mentionsIn(low).rest || low)) return setBox(""), say(t, "Cleared");
+    if (/^(hide|close|collapse) (the )?(panel|path|sidebar|side panel)$/.test(low)) return setPanel(false), say(t, "Panel hidden. Say “show the panel” to bring it back.");
+    if (/^(show|open) (the )?(panel|path|sidebar|side panel)$/.test(low)) return setPanel(true), say(t, "Panel shown");
     if (NEXT.test(low)) return step(t, 1);
     if (PREV.test(low)) return back(), say(t, "Back");
     if (words <= 7 && (GO.test(low) || words <= 2)) {
@@ -503,7 +530,8 @@ export default function Stage() {
     say(t, "…");
     const r = await run(pointing ? "Changing it" : "Working it out", () =>
       post<{ intent: string; tab?: Tab; answer?: string; persona?: string } & Partial<EditResult>>("/api/say", {
-        stage, text: t, bot, selection: sel ? { kind: sel.kind, id: sel.id, text: sel.text } : undefined,
+        stage, bot, selection: sel ? { kind: sel.kind, id: sel.id, text: sel.text } : undefined,
+        text: targets.length > 1 ? `(This is about: ${targets.map((x) => `${x.token.slice(1)} = ${x.label}`).join("; ")}) ${t}` : t,
       }),
     );
     if (!r) return;
@@ -603,7 +631,6 @@ export default function Stage() {
     const ie = e.nativeEvent as InputEvent;
     const jump = v.length - text.length;
     log("input", { type: ie.inputType, len: v.length, jump, scene });
-    lastInput.current = Date.now();
     setText(v);
     clearTimeout(timer.current);
     if (ie.inputType === "insertFromPaste" || ie.inputType === "insertReplacementText" || jump > 1) {
@@ -619,16 +646,16 @@ export default function Stage() {
       if (counting) {
         clearTimeout(timer.current);
         setCounting(false);
-      } else if (sel) setSel(null);
+      } else if (sel) clearMentions();
       else if (!text) back();
-    } else if (e.key === "Backspace" && !text && sel) setSel(null);
+    }
+
   }
 
-  function pickStep(id: string) {
+  function pickStep(id: string, add = false, dbl = false) {
     if (!bot) return;
     const i = bot.flow.steps.findIndex((s) => s.id === id);
-    if (sel?.id === id) return setSel(null);
-    setSel({ kind: "step", id, label: `Change → step ${i + 1} · ${bot.flow.steps[i].label}` });
+    attach(`@${bot.flow.steps[i].label}`, add, dbl);
   }
 
   // ---------- render ----------
@@ -665,8 +692,8 @@ export default function Stage() {
         </div>
       </header>
 
-      <nav className="journey" aria-label="Where you are">
-        <div className="jt">Your path</div>
+      <nav className={`journey ${panel ? "" : "closed"}`} aria-label="Where you are">
+        <div className="jt">Your path<button onClick={() => setPanel(!panel)} aria-label={panel ? "Hide the path" : "Show the path"}>{panel ? "‹" : "›"}</button></div>
         {JOURNEY.map((j) => {
           const here = scene === j.s || (scene === "building" && j.s === "questions");
           const ok = j.s === "describe" || j.s === "bots" || (j.s === "questions" ? !!draft?.interview : !!bot && (j.s !== "fix" || !!fix));
@@ -682,7 +709,7 @@ export default function Stage() {
         <div className="jh">Say “go to rules”, “next” or “back”.{past.length > 0 && <> Came from: <b>{JOURNEY.find((j) => j.s === past[past.length - 1])?.name ?? "Questions"}</b></>}</div>
       </nav>
 
-      <main>
+      <main className={panel ? "withpanel" : ""}>
         <section className={`scene ${scene === "describe" ? "on" : ""}`}>
           <div className="eyebrow">Rehearse · build a voice bot by talking</div>
           <h1>What voice bot do you want to build?</h1>
@@ -719,7 +746,7 @@ export default function Stage() {
             <>
               <div className="eyebrow">{bot.name} · v{bot.version} · {bot.languages.map(langName).join(" · ")} · click a step, then say the change</div>
               <div className="flowbig" key={`${bot.id}-${scene}`}>
-                <Flow bot={bot} chg={changed?.steps} sel={sel?.kind === "step" ? sel.id : undefined} onPick={pickStep} />
+                <Flow bot={bot} chg={changed?.steps} sel={targets.filter((x) => x.kind === "step").map((x) => x.id!)} onPick={pickStep} />
               </div>
               <div className="chg">{changed && <span>{changed.summary}</span>}</div>
             </>
@@ -734,8 +761,8 @@ export default function Stage() {
               <div className="rgrid">
                 {bot.rules.map((r, i) => (
                   <button key={r.id} style={{ ["--d" as string]: `${i * 0.05}s` }}
-                    className={`rcard ${r.suggested ? "sug" : ""} ${r.kind === "always" ? "ok" : ""} ${sel?.id === r.id ? "sel" : ""} ${changed?.rules.includes(r.id) ? "chg" : ""}`}
-                    onClick={() => setSel({ kind: "rule", id: r.id, label: `Change → rule ${i + 1}` })}>
+                    className={`rcard ${r.suggested ? "sug" : ""} ${r.kind === "always" ? "ok" : ""} ${targets.some((x) => x.id === r.id) ? "sel" : ""} ${changed?.rules.includes(r.id) ? "chg" : ""}`}
+                    onClick={(e) => attach(`@Rule ${i + 1}`, e.shiftKey || e.metaKey)} onDoubleClick={() => attach(`@Rule ${i + 1}`, true, true)}>
                     <span className="ri"><I d={r.kind === "never" ? IC.x : IC.check} /></span>
                     <div>
                       <b>{i + 1}. {r.kind === "never" ? "Never" : "Always"}: {r.text}</b>
@@ -755,7 +782,7 @@ export default function Stage() {
               <h2>What it knows</h2>
               <div className="facet">
                 {bot.knowledge.length ? (
-                  <ol>{bot.knowledge.map((k) => <li key={k.id} className={changed?.knowledge.includes(k.id) ? "chg" : ""} onClick={() => setSel({ kind: "knowledge", id: k.id, label: `Change → fact` })}>{k.text}</li>)}</ol>
+                  <ol>{bot.knowledge.map((k, i) => <li key={k.id} className={changed?.knowledge.includes(k.id) ? "chg" : ""} onClick={(e) => attach(`@Fact ${i + 1}`, e.shiftKey || e.metaKey)} onDoubleClick={() => attach(`@Fact ${i + 1}`, true, true)}>{k.text}</li>)}</ol>
                 ) : <p className="empty">No facts yet. Say your prices, plans or policies.</p>}
                 {bot.tools.some((t) => t.enabled) && <p className="note">Tools: {bot.tools.filter((t) => t.enabled).map((t) => TOOL_SHELF[t.id] ?? t.id).join(" · ")}</p>}
               </div>
@@ -892,12 +919,8 @@ export default function Stage() {
           {heard && <b className={heard.ans ? "ans" : ""}>{busy ? <span className="dots"><i /><i /><i /></span> : heard.res}</b>}
         </div>
         <div className="pill">
-          <span className={`tgt ${sel?.kind === "turn" ? "bad" : sel ? "chg" : scene === "call" ? "call" : ""}`} onClick={() => setSel(null)} title="Esc to clear">
-            {sel ? <><I d={IC.target} /><span>{sel.label}</span><I d={IC.x} /></> : scene === "call" ? <><I d={IC.target} /><span>Caller</span></> : null}
-          </span>
           <textarea ref={inp} id="inp" rows={1} value={text} onInput={onInput} onChange={() => {}} onKeyDown={onKey}
             placeholder={busy ? `${busy}…` : PLACEHOLDER[scene] ?? "Say what to do…"} aria-label="Talk or type to Rehearse" autoFocus />
-          <span className="fnh">hold <kbd>fn</kbd></span>
           <button className={`send ${counting ? "count" : ""}`} onClick={() => handle(text)} aria-label="Send">
             <I d={IC.up} w={2.4} />
             <svg className="cring" viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" /></svg>
