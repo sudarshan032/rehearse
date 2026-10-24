@@ -26,7 +26,7 @@ export async function askJSON<T extends z.ZodType>(
   user: string,
   schema: T,
 ): Promise<{ data: z.infer<T>; llm: string; ms: number }> {
-  let last = "no AI provider key set";
+  const errs: string[] = [];
   for (const p of PROVIDERS) {
     const key = p.key();
     if (!key) continue;
@@ -35,7 +35,7 @@ export async function askJSON<T extends z.ZodType>(
       try {
         const res = await fetch(p.url, {
           method: "POST",
-          headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+          headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", "User-Agent": "rehearse/0.1" },
           body: JSON.stringify({
             model: p.model(),
             messages: [
@@ -49,19 +49,19 @@ export async function askJSON<T extends z.ZodType>(
           signal: AbortSignal.timeout(60_000),
         });
         if (!res.ok) {
-          last = `${p.name} answered ${res.status}`;
+          errs.push(`${p.name} answered ${res.status}`);
           break; // rate limit or outage: go to the next provider
         }
         const body = await res.json();
         const parsed = schema.safeParse(JSON.parse(body.choices?.[0]?.message?.content ?? ""));
         if (parsed.success) return { data: parsed.data, llm: `${p.name}:${p.model()}`, ms: Date.now() - t0 };
-        last = `${p.name} returned the wrong shape`;
+        errs.push(`${p.name} returned the wrong shape`);
       } catch (e) {
-        last = `${p.name}: ${e instanceof Error ? e.name : "error"}`;
+        errs.push(`${p.name}: ${e instanceof Error ? e.name : "error"}`);
       }
     }
   }
-  throw new LLMError(last);
+  throw new LLMError(errs.join(", ") || "no AI provider key set");
 }
 
 export function fail(e: unknown) {
