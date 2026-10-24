@@ -9,11 +9,33 @@ const PROVIDERS = [
     model: () => process.env.GROQ_MODEL ?? "openai/gpt-oss-120b",
     extra: { reasoning_effort: "low" },
   },
+  // Each Groq model has its own free rate limit, so a busy model falls through to the next one.
+  {
+    name: "groq",
+    url: "https://api.groq.com/openai/v1/chat/completions",
+    key: () => process.env.GROQ_API_KEY,
+    model: () => "qwen/qwen3.8-27b",
+    extra: {},
+  },
+  {
+    name: "groq",
+    url: "https://api.groq.com/openai/v1/chat/completions",
+    key: () => process.env.GROQ_API_KEY,
+    model: () => "openai/gpt-oss-20b",
+    extra: { reasoning_effort: "low" },
+  },
   {
     name: "openrouter",
     url: "https://openrouter.ai/api/v1/chat/completions",
     key: () => process.env.OPENROUTER_API_KEY,
     model: () => process.env.OPENROUTER_MODEL ?? "google/gemma-4-31b-it:free",
+    extra: {},
+  },
+  {
+    name: "openrouter",
+    url: "https://openrouter.ai/api/v1/chat/completions",
+    key: () => process.env.OPENROUTER_API_KEY,
+    model: () => "nvidia/nemotron-3-super-120b-a12b:free",
     extra: {},
   },
 ];

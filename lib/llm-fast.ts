@@ -11,6 +11,8 @@ const PROVIDERS = [
     key: () => process.env.GROQ_API_KEY,
     model: () => process.env.GROQ_FAST_MODEL ?? "openai/gpt-oss-120b",
   },
+  { name: "groq", url: "https://api.groq.com/openai/v1/chat/completions", key: () => process.env.GROQ_API_KEY, model: () => "qwen/qwen3.8-27b" },
+  { name: "groq", url: "https://api.groq.com/openai/v1/chat/completions", key: () => process.env.GROQ_API_KEY, model: () => "openai/gpt-oss-20b" },
   {
     name: "openrouter",
     url: "https://openrouter.ai/api/v1/chat/completions",

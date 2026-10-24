@@ -128,6 +128,7 @@ export default function Stage() {
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const media = useRef<MediaRecorder | null>(null);
   const queued = useRef(false);
+  const later = useRef<string[]>([]); // dictations that arrived while another one was waiting
   const lastTurn = useRef(""); // the call turn that broke a rule, for "@Last reply"
   const clickBase = useRef<{ at: number; text: string }>({ at: 0, text: "" });
 
@@ -135,6 +136,12 @@ export default function Stage() {
   function insert(t: string, how: string) {
     const el = inp.current;
     if (!el) return;
+    // Something is already waiting to run: keep this one for after it, don't glue two commands together.
+    if (queued.current) {
+      later.current.push(t.trim());
+      log("insert", { how: "later", len: t.length });
+      return;
+    }
     const v = (el.value.trim() ? el.value.trimEnd() + " " : "") + t.trim();
     el.value = v;
     el.focus({ preventScroll: true });
@@ -535,8 +542,8 @@ export default function Stage() {
     if (scene === "questions" && moreRe.test(t)) return askMore(t);
 
     if (scene === "describe" || scene === "bots") return brief(t);
-    if (scene === "questions" && /^(rehears|call it|test it|try it|show|open|go to|take me)/.test(low))
-      return say(t, "Answer the questions first, or say “just build it”.", { err: true });
+    if (scene === "questions" && (/^(rehears|call it|test it|try it|show|open|go to|take me)/.test(low) || (words < 3 && g?.intent !== "build_now")))
+      return say(t, "Answer the questions in one go, or say “just build it”.", { err: true });
     if (scene === "questions") return build(t, g?.intent === "build_now" ? "" : t);
     if (!bot) return brief(t);
     if ((scene === "call" || scene === "fix") && g?.intent === "caller_turn" && !pointing) {
@@ -652,9 +659,14 @@ export default function Stage() {
   }
 
   useEffect(() => {
-    if (!busy && queued.current) {
+    if (busy) return;
+    if (queued.current) {
       queued.current = false;
       handle(inp.current?.value ?? "");
+    } else if (later.current.length) {
+      const next = later.current.shift()!;
+      setBox(next);
+      handle(next);
     }
   });
 
