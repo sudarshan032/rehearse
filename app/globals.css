@@ -414,3 +414,7 @@ body.listening .tries{opacity:0}
 .vlog div{flex:1;min-width:0} .vlog p{font-size:15px} .vlog small{display:block;color:var(--muted);font-size:12.5px;margin-top:4px} .vlog s{color:var(--bad)}
 .vlog .btn{height:34px}
 .subs,.convo,.scene,.side,.xlist{scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+.cutmark{color:var(--bad)}
+.tile{position:relative;padding:0} .tilebody{display:block;width:100%;text-align:left;padding:16px}
+.tile .rm{position:absolute;top:10px;right:10px;font:500 11.5px var(--body);color:var(--faint);padding:3px 8px;border-radius:6px;opacity:0;transition:opacity .2s}
+.tile:hover .rm,.tile .rm:focus-visible,.tile .rm.sure{opacity:1} .tile .rm:hover{color:var(--bad)} .tile .rm.sure{background:var(--bad-soft);color:var(--bad)}

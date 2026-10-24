@@ -169,7 +169,12 @@ function browserVoices(): Promise<SpeechSynthesisVoice[]> {
 
 const norm = (v: SpeechSynthesisVoice) => v.lang.replace("_", "-").toLowerCase();
 // Best-sounding first: downloaded Enhanced/Premium voices, then Google's online voices, then the rest.
-const rank = (v: SpeechSynthesisVoice) => (/enhanced|premium|natural|neural/i.test(v.name) ? 4 : 0) + (/^google/i.test(v.name) ? 2 : 0) + Number(v.localService);
+// The bots are written as women ("Priya"), so known female voices come first. ponytail: a name list, since
+// browsers don't say a voice's gender; add names when new voices show up.
+const FEMALE = /tara|veena|lekha|geeta|isha|kiyara|neerja|swara|shruti|samantha|karen|moira|tessa|google/i;
+const MALE = /rishi|aman|daniel|alex|fred|ravi|hemant|madhur|prabhat|mohan/i;
+const rank = (v: SpeechSynthesisVoice) =>
+  (/enhanced|premium|natural|neural/i.test(v.name) ? 4 : 0) + (/^google/i.test(v.name) ? 2 : 0) + Number(v.localService) + (FEMALE.test(v.name) ? 1.5 : 0) - (MALE.test(v.name) ? 2 : 0);
 const PREF = (lang: SpeakLang) => `rh-voice-${lang}`;
 
 /** The voices this browser has for a language, best first, and the one the user picked (if any). */

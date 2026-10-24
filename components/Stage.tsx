@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { langName, TOOL_SHELF, type Bot, type Interview } from "@/lib/bot";
 import { guessIntent, personaOf, type Stage as SayStage, type Tab } from "@/lib/say";
-import { getDraft, listDrafts, newId, post, saveDraft, type Change, type Draft } from "@/lib/store";
+import { getDraft, listDrafts, newId, post, removeDraft, saveDraft, type Change, type Draft } from "@/lib/store";
 import { EXPORTS } from "@/lib/export";
 import { SAMPLE_BOT, SAMPLE_BRIEF, SAMPLE_CALL, SAMPLE_ID } from "@/lib/sample";
 import { pickVoiceName, preloadVoice, speak, stopSpeaking, voicesFor, type SpeakLang } from "@/lib/speak";
@@ -19,7 +19,7 @@ type SRClass = new () => {
 type Call = {
   stream: MediaStream; ac: AudioContext; an: AnalyserNode; history: Line[];
   phase: "listening" | "thinking" | "speaking"; since: number; lang: string;
-  rec?: MediaRecorder; sr?: InstanceType<SRClass>; onClip?: (b: Blob) => void;
+  rec?: MediaRecorder; sr?: InstanceType<SRClass>; onClip?: (b: Blob) => void; loud?: boolean;
 };
 const srClass = () =>
   typeof window === "undefined" ? undefined
@@ -94,9 +94,16 @@ const INTROS = [
 ].map((x) => ({ ...x, words: x.said.split(" ").map((w) => [w.replace(/^~/, ""), w.startsWith("~")] as [string, boolean]) }));
 
 const langOf = (s: string) => (/[ఀ-౿]/.test(s) ? "TE" : /[ऀ-ॿ]/.test(s) ? "HI" : "EN");
-// Any Telugu or Hindi letters → that language's system voice (it reads the English words in the reply too).
-const ttsLang = (s: string, bot: Bot): SpeakLang =>
-  /[ఀ-౿]/.test(s) ? "te-IN" : /[ऀ-ॿ]/.test(s) ? "hi-IN" : bot.languages.includes("en") || /[a-z]/i.test(s) ? "en-IN" : (bot.persona.voice.lang as SpeakLang);
+// The voice follows the language most of the reply is in. Telugu or Hindi counts once it is a real part of the
+// line (a third of the letters), so "English, हिंदी, or తెలుగు?" stays English and "Pro లో limit ఉండదు" is Telugu.
+const ttsLang = (s: string, bot: Bot): SpeakLang => {
+  const n = (re: RegExp) => s.match(re)?.length ?? 0;
+  const [te, hi, en] = [n(/[ఀ-౿]/g), n(/[ऀ-ॿ]/g), n(/[a-z]/gi)];
+  const all = te + hi + en || 1;
+  if (te / all >= 0.33 && te >= hi) return "te-IN";
+  if (hi / all >= 0.33) return "hi-IN";
+  return en || !bot.persona.voice.lang ? "en-IN" : (bot.persona.voice.lang as SpeakLang);
+};
 const undoRe = /^(undo|undo that|undo it|revert|wapas karo)\b/i;
 const replayRe = /^(replay|replay (it|that|the turn)|try (it )?again|again)\b/i;
 const backRe = /^(back|go back|previous|wapas|venakki)\.?$/i;
@@ -282,7 +289,10 @@ export default function Stage() {
       const d = open ? getDraft(open) : undefined;
       if (d) {
         setDraft(d);
-        setScene(d.bot ? "blueprint" : d.interview ? "questions" : "describe");
+        // Back to the same screen after a reload (screens that need a live call or fix fall back to the flow).
+        const was = sessionStorage.getItem("rehearse:scene") as Scene | null;
+        const safe: Scene[] = ["blueprint", "rules", "knowledge", "prompt", "stack", "voice", "export", "bots"];
+        setScene(d.bot ? (was && safe.includes(was) ? was : "blueprint") : d.interview ? "questions" : "describe");
       }
     } catch {}
   }, []);
@@ -366,6 +376,9 @@ export default function Stage() {
     if (s === scene) return;
     if (remember) setPast((p) => [...p.slice(-20), scene]);
     setScene(s);
+    try {
+      sessionStorage.setItem("rehearse:scene", s); // so a reload comes back to this screen
+    } catch {}
     if (s !== "call" && s !== "fix") setVig("");
     if (s === "describe") setBox("");
   }
@@ -592,6 +605,7 @@ export default function Stage() {
         } else if (!voiced && now - c.since > 15000) restartRec(c); // long silence: keep the clip small
       } else if (c.phase === "speaking" && bargeRef.current) {
         // The bot's own voice comes back through the mic; only a voice clearly louder than that counts as you.
+        c.loud = rms > Math.max(0.03, echo * 1.15, floor * 4);
         if (now - c.since < 350 || rms < Math.max(0.04, echo * 1.6, floor * 4)) {
           echo = Math.max(echo * 0.995, rms);
           voiced = Math.max(0, voiced - dt);
@@ -645,14 +659,16 @@ export default function Stage() {
     const SR = srClass();
     if (!SR || !bargeRef.current) return;
     const mine = new Set(said.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []);
+    // The recogniser sometimes turns the bot's echo into short junk ("హ య"): only words of 3+ letters count,
+    // and only while the mic is clearly picking up more than the echo alone.
     const sr = new SR();
     sr.lang = lang;
     sr.interimResults = true;
     sr.continuous = true;
     sr.onresult = (e) => {
       const heard = Array.from(e.results, (r) => r[0].transcript).join(" ").toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
-      const fresh = heard.filter((w) => !mine.has(w));
-      if (fresh.length >= 2 && c.phase === "speaking" && call.current === c) {
+      const fresh = heard.filter((w) => w.length >= 3 && !mine.has(w));
+      if (fresh.length >= 2 && c.loud && c.phase === "speaking" && call.current === c) {
         log("call-barge", { by: "words", heard: heard.join(" ") });
         sr.abort();
         interrupt(c);
@@ -1332,11 +1348,12 @@ export default function Stage() {
                 <div className="convo" ref={convoEl}>
                   {vlines.map((l, i) => {
                     const now = l.role === "bot" && i === vlines.length - 1 && live === "speaking";
-                    const upto = l.cut ?? (now ? spoken : l.text.length);
+                    const upto = now ? spoken : l.text.length;
                     return (
                       <div key={i} className={`sub ${l.role === "caller" ? "me" : ""}`}>
-                        <small>{l.role === "caller" ? "You" : `Bot · step ${stepNo(l.step_id)}`}{l.cut ? " · cut off by you" : ""}</small>
-                        <p>{l.text.slice(0, upto)}{upto < l.text.length && <span className="todo">{l.text.slice(upto)}</span>}</p>
+                        <small>{l.role === "caller" ? "You" : `Bot · step ${stepNo(l.step_id)}`}{l.cut ? " · you cut in" : ""}</small>
+                        {l.cut ? <p>{l.text.slice(0, l.cut).trimEnd()}<span className="cutmark"> —</span></p>
+                          : <p>{l.text.slice(0, upto)}{upto < l.text.length && <span className="todo">{l.text.slice(upto)}</span>}</p>}
                       </div>
                     );
                   })}
@@ -1388,7 +1405,7 @@ export default function Stage() {
         <section className={`scene ${scene === "bots" ? "on" : ""}`}>
           <div className="eyebrow">saved in this browser · no sign-in</div>
           <h2>My bots</h2>
-          <BotList on={scene === "bots"} open={open} />
+          <BotList on={scene === "bots"} open={open} current={draft?.id} />
         </section>
 
         </main>
@@ -1450,17 +1467,28 @@ function VoicePick({ lang }: { lang: SpeakLang }) {
   );
 }
 
-function BotList({ on, open }: { on: boolean; open: (d: Draft) => void }) {
+function BotList({ on, open, current }: { on: boolean; open: (d: Draft) => void; current?: string }) {
+  const [, redraw] = useState(0);
+  const [sure, setSure] = useState("");
   const list = on ? listDrafts() : [];
   if (!list.length) return <p className="empty">No bots yet. Say what you want to build.</p>;
   return (
     <div className="bots">
       {list.map((d, i) => (
-        <button key={d.id} className="tile" style={{ ["--d" as string]: `${i * 0.05}s` }} onClick={() => open(d)}>
-          <small>{d.id === SAMPLE_ID ? "Sample · " : ""}{d.bot ? `v${d.bot.version}` : "questions"}</small>
-          <b>{d.bot?.name ?? d.interview?.name ?? "Untitled"}</b>
-          <span>{(d.bot?.languages ?? d.interview?.understood.languages ?? []).map(langName).join(" · ")}</span>
-        </button>
+        <div key={d.id} className="tile" style={{ ["--d" as string]: `${i * 0.05}s` }}>
+          <button className="tilebody" onClick={() => open(d)}>
+            <small>{d.id === SAMPLE_ID ? "Sample · " : ""}{d.bot ? `v${d.bot.version}` : "questions"}{d.id === current ? " · open now" : ""}</small>
+            <b>{d.bot?.name ?? d.interview?.name ?? "Untitled"}</b>
+            <span>{(d.bot?.languages ?? d.interview?.understood.languages ?? []).map(langName).join(" · ")}</span>
+          </button>
+          {d.id !== SAMPLE_ID && d.id !== current && (
+            // Two clicks to remove, so a stray click never loses a bot.
+            <button className={`rm ${sure === d.id ? "sure" : ""}`} onClick={() => (sure === d.id ? (removeDraft(d.id), setSure(""), redraw((n) => n + 1)) : setSure(d.id))}
+              onBlur={() => setSure("")} aria-label={`Remove ${d.bot?.name ?? "bot"}`}>
+              {sure === d.id ? "Remove for good?" : "Remove"}
+            </button>
+          )}
+        </div>
       ))}
     </div>
   );

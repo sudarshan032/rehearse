@@ -9,14 +9,24 @@ const KEY = "rehearse:bots";
 
 function all(): Record<string, Draft> {
   try {
-    return JSON.parse(localStorage.getItem(KEY) ?? "{}");
+    const v = JSON.parse(localStorage.getItem(KEY) ?? "{}");
+    return v && typeof v === "object" && !Array.isArray(v) ? v : {}; // anything else is a broken save: start clean
   } catch {
     return {};
   }
 }
 
 export const getDraft = (id: string): Draft | undefined => all()[id];
-export const listDrafts = () => Object.values(all()).sort((a, b) => b.updated - a.updated);
+export const listDrafts = () => Object.values(all()).filter((d) => d?.id && (d.bot || d.interview)).sort((a, b) => b.updated - a.updated);
+
+/** Remove one of your own bots from this browser. */
+export function removeDraft(id: string) {
+  const bots = all();
+  delete bots[id];
+  try {
+    localStorage.setItem(KEY, JSON.stringify(bots));
+  } catch {}
+}
 
 export function saveDraft(d: Draft) {
   const bots = all();
