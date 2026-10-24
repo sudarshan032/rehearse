@@ -88,16 +88,20 @@ export function Flow({ bot, lit = [], cur, bad, good, chg = [], sel = [], mini, 
       [mx, my, anchor] = [x - 6, (y1 + y2) / 2 + 4, "end"];
     } else if (back) {
       // Loops and backward links run in their own lane under the whole flow, so they never cross a box.
-      const lane = bottom + 22 + backIdx.get(i)! * 20, x1 = a.x + W / 2, x2 = b.x + W / 2 + 14;
-      d = `M${x1} ${a.y + H} V${lane} H${x2} V${b.y + H + 6}`;
-      pts = line([[x1, a.y + H], [x1, lane], [x2, lane], [x2, b.y + H + 6]]);
+      // A box under the source in its column? Leave from the right side instead, so the line never runs through it.
+      const lane = bottom + 22 + backIdx.get(i)! * 20, x2 = b.x + W / 2 + 14;
+      const under = [...pos.values()].some((p) => p.x === a.x && p.y > a.y);
+      const out: P[] = under ? [[a.x + W, a.y + H / 2], [a.x + W + 16, a.y + H / 2], [a.x + W + 16, lane]] : [[a.x + W / 2, a.y + H], [a.x + W / 2, lane]];
+      const all: P[] = [...out, [x2, lane], [x2, b.y + H + 6]];
+      d = "M" + all.map((p) => p.join(" ")).join(" L");
+      pts = line(all);
       [mx, my, anchor] = [(a.x + b.x + W) / 2 + 7, lane - 5, "middle"];
     } else {
       const c = [a.x + W, a.y + H / 2, a.x + W + GX / 2, a.y + H / 2, b.x - GX / 2, b.y + H / 2, b.x - 4, b.y + H / 2];
       d = `M${c[0]} ${c[1]} C${c[2]} ${c[3]} ${c[4]} ${c[5]} ${c[6]} ${c[7]}`;
       pts = curve(c);
       // Several links leave this box: label each at its own target, where they are apart.
-      [mx, my, anchor] = outs.get(l.from)! > 1 ? [b.x - 10, b.y + H / 2 - 7, "end"] : [a.x + W + 8, a.y + H / 2 - 7, "start"];
+      [mx, my, anchor] = outs.get(l.from)! > 1 ? [b.x - 14, b.y + H / 2 - 9, "end"] : [a.x + W + 8, a.y + H / 2 - 7, "start"];
     }
     const max = b.x === a.x ? 18 : back ? 22 : 14;
     const tag = l.when.length > max ? l.when.slice(0, max - 1) + "…" : l.when;
@@ -114,11 +118,11 @@ export function Flow({ bot, lit = [], cur, bad, good, chg = [], sel = [], mini, 
       const x0 = e.anchor === "start" ? x - 2 : e.anchor === "end" ? x - w + 2 : x - w / 2;
       return [x0, y - 12, x0 + w, y + 4];
     };
-    const other = edges.filter((o) => o !== e).flatMap((o) => o.pts);
+    const other = [...edges.filter((o) => o !== e).flatMap((o) => o.pts), ...e.pts.slice(-4)]; // and its own arrowhead
     let best = { x: e.mx, y: e.my, cost: Infinity };
     for (const dy of [0, -14, 14, -28, 28, -42, 42]) {
       const r = at(e.mx, e.my + dy);
-      const cost = boxes.filter((b) => hit(r, b)).length * 100 + other.filter((p) => inside(p, r)).length + Math.abs(dy) / 100;
+      const cost = boxes.filter((b) => hit(r, b)).length * 100 + other.filter((p) => inside(p, r)).length * 5 + Math.abs(dy) / 100;
       if (cost < best.cost) best = { x: e.mx, y: e.my + dy, cost };
       if (cost < 1) break;
     }

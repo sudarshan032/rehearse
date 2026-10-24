@@ -157,7 +157,8 @@ main{position:fixed;top:64px;left:0;right:0;bottom:192px}
 .n.chg .bx{stroke:var(--accent);stroke-width:2.5;stroke-dasharray:6 4} .n.chg .nb2{fill:var(--accent)}
 .n.good .bx{stroke:var(--ok);stroke-width:3}
 .n.sel .bx{stroke:var(--accent);stroke-width:3;fill:color-mix(in oklab,var(--paper) 88%,var(--accent))}
-.e{fill:none;stroke:var(--faint);stroke-width:1.6;stroke-dasharray:420;animation:draw .9s ease-out both;animation-delay:var(--d,0s);marker-end:url(#mk)}
+/* the dash is longer than any link, so the draw-in animation never leaves a gap on long links */
+.e{fill:none;stroke:var(--faint);stroke-width:1.6;stroke-dasharray:3000;animation:draw .9s ease-out both;animation-delay:var(--d,0s);marker-end:url(#mk)}
 .e.lit{stroke:var(--accent);stroke-width:2.6;stroke-dasharray:7 6;animation:march .7s linear infinite;marker-end:url(#mkA)}
 #mk path{fill:var(--faint)}
 .el{font:400 12px var(--mono);fill:var(--muted);paint-order:stroke;stroke:var(--bg);stroke-width:6px;stroke-linejoin:round;animation:fade .5s both;animation-delay:var(--d,0s)}
@@ -267,7 +268,7 @@ body.listening .tries{opacity:0}
 /* ---------- motion ---------- */
 @keyframes in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}} @keyframes fade{from{opacity:0}}
 @keyframes rise{from{opacity:0;transform:translateY(18px)}} @keyframes pop{from{opacity:0;transform:scale(.85)}}
-@keyframes draw{from{stroke-dashoffset:420}} @keyframes march{to{stroke-dashoffset:-13}} @keyframes halo{from{opacity:.8;transform:scale(1)}to{opacity:0;transform:scale(1.2,1.6)}}
+@keyframes draw{from{stroke-dashoffset:3000}} @keyframes march{to{stroke-dashoffset:-13}} @keyframes halo{from{opacity:.8;transform:scale(1)}to{opacity:0;transform:scale(1.2,1.6)}}
 @keyframes shake{20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(3px)}} @keyframes blink{50%{opacity:.45}}
 @keyframes bounce{0%,80%,100%{transform:none;opacity:.5}40%{transform:translateY(-5px);opacity:1}} @keyframes count{to{stroke-dashoffset:0}}
 @keyframes paste{from{background:var(--accent-soft)}} @keyframes stamp{from{opacity:0;transform:scale(1.6) rotate(-8deg)}}
@@ -298,3 +299,14 @@ body.listening .tries{opacity:0}
 .micbtn.listening,.micbtn.thinking,.micbtn.speaking{width:68px;height:68px;margin:8px 0 2px} .micbtn:not(.off) .ic{width:26px;height:26px}
 .convo{max-height:42vh}
 .scene .live{flex:none}
+/* long scenes (prompt, rules) fade at the edges instead of being cut by a hard line */
+.scene{mask-image:linear-gradient(transparent,#000 18px,#000 calc(100% - 18px),transparent)}
+/* questions: all of them fit above the input on a laptop screen */
+.bigq li{padding:11px 0;gap:14px} .bigq b{font-size:clamp(19px,1.7vw,23px)} .qa{font-size:14px}
+.scene h2+.known{margin-top:-6px}
+@media (max-width:760px){
+  .eyebrow{font-size:10px;letter-spacing:.08em;text-align:center}
+  .flowbig{overflow-x:auto;max-height:none} .flowbig svg{min-width:760px;max-height:none}
+  .minimap{overflow-x:auto} .minimap svg{min-width:560px}
+  .stamp{font-size:17px;padding:2px 12px} .sub em{font-size:17px}
+}

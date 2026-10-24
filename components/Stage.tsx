@@ -421,9 +421,8 @@ export default function Stage() {
     setChanged({ ...r.changed, summary: r.summary });
     say(t, r.summary);
     const wasTurn = sel?.kind === "turn";
-    // The named step, rule or fact stays in the box for more changes; "@Last reply" is done.
-    const keep = targets.filter((x) => x.kind !== "turn").map((x) => x.token);
-    if (keep.length) setTimeout(() => setBox(keep.join(" ") + " "), 0);
+    // The box is empty after a change, so the next thing said ("rehearse", a caller line) is not taken as
+    // another change to the same step. The changed parts stay highlighted on screen.
     if (wasTurn) lastTurn.current = "";
     if (wasTurn || scene === "call") {
       const last = [...lines].reverse().find((l) => l.role === "bot");
@@ -453,8 +452,10 @@ export default function Stage() {
     setFix(null);
     go("call");
     say(t, who ? `Calling as ${who}. The bot speaks first.` : "Calling. The bot speaks first.");
-    const r = await run("Ringing", () => post<{ reply: string; step_id: string; ended: boolean }>("/api/turn", { bot, history: [], text: "" }));
-    if (r) setLines([{ role: "bot", text: r.reply, step_id: r.step_id, ended: r.ended }]);
+    // The bot opens with its first step's line, word for word: instant, free, and always the right step.
+    const start = bot.flow.steps.find((x) => x.kind === "start") ?? bot.flow.steps[0];
+    setLines([{ role: "bot", text: start.says, step_id: start.id }]);
+    if (talk) speak(start.says, ttsLang(start.says, bot)).catch(() => {});
   }
 
   async function callerTurn(t: string, base: Line[] = lines, b: Bot = bot!) {
@@ -699,6 +700,10 @@ export default function Stage() {
       return;
     }
     setText("");
+    // A command said with a step still attached ("@Greet rehearse as a busy owner") is a command, not a change.
+    const bare = mentionsIn(t);
+    if (bare.found.length && /^(rehears|practi[cs]e|start the call|stop the call|end the call|hang up|go (to|back)|(show|open)( me)? (the |my )?(rules|facts|prompt|flow|stack|bots|export|sample)|take me|next$|back$|export|download|voice test|zoom|play the|undo|scroll)/i.test(bare.rest))
+      return handle(bare.rest.replace(/\s+/g, " "));
     log("said", { scene, text: t, targets: targets.map((x) => x.token) });
     lastSaid.current = t;
     const stage = SAY_STAGE[scene];
@@ -714,10 +719,18 @@ export default function Stage() {
     if (/\b(sample|example|demo)( bot)?$/.test(low) && words <= 5 && scene !== "call") return openSample(t);
     if (/^(speak|say|read) (the )?(replies|answers)( out loud| aloud)?$|^(voice|sound) on$|^unmute$/.test(low)) return setTalk(true), say(t, "The bot will speak its replies");
     if (/^(mute|stop speaking|voice off|sound off|quiet)$/.test(low)) return setTalk(false), say(t, "Muted");
-    if (/^(zoom in|bigger|make it bigger)$/.test(low)) return setZoom((z) => Math.min(2.2, z + 0.4)), say(t, "Zoomed in");
-    if (/^(zoom out|smaller|make it smaller)$/.test(low)) return setZoom((z) => Math.max(1, z - 0.4)), say(t, "Zoomed out");
-    if (/^(fit|fit (it|the flow)|reset zoom|whole flow)$/.test(low)) return setZoom(1), say(t, "Whole flow");
+    if (/^(zoom in|bigger|make it bigger)$/.test(low)) return go("blueprint"), setZoom((z) => Math.min(2.2, z + 0.4)), say(t, "Zoomed in on the flow");
+    if (/^(zoom out|smaller|make it smaller)$/.test(low)) return go("blueprint"), setZoom((z) => Math.max(1, z - 0.4)), say(t, "Zoomed out");
+    if (/^(fit|fit (it|the flow)|reset zoom|whole flow)$/.test(low)) return go("blueprint"), setZoom(1), say(t, "Whole flow");
     if (words <= 6 && /\b(start|make|create|build|begin)( a| an)? (new|another|fresh) (bot|one|agent)\b|^new bot$/.test(low)) return nav(t, "home");
+    const scroll = low.match(/^(?:please )?(?:scroll|page|move|go)? ?(down|up)(?: a bit| more| please)?$|^(?:scroll|go|jump) (?:to )?(?:the )?(top|bottom|end|start)$/);
+    if (scroll) {
+      const el = document.querySelector<HTMLElement>(".scene.on");
+      const dir = scroll[1] ?? scroll[2];
+      const top = dir === "down" ? el!.scrollTop + el!.clientHeight * 0.7 : dir === "up" ? el!.scrollTop - el!.clientHeight * 0.7 : dir === "top" || dir === "start" ? 0 : el!.scrollHeight;
+      el?.scrollTo({ top, behavior: "smooth" });
+      return say(t, el && el.scrollHeight > el.clientHeight ? `Scrolled ${dir}` : "Everything already fits on the screen");
+    }
     if (NEXT.test(low)) return step(t, 1);
     if (PREV.test(low)) return back(), say(t, "Back");
     if (words <= 7 && (GO.test(low) || words <= 2)) {
@@ -789,8 +802,9 @@ export default function Stage() {
     say(t, `Showing ${JOURNEY.find((j) => j.s === s)?.name}`);
   }
   function step(t: string, dir: 1 | -1) {
-    const order: Scene[] = ["describe", "questions", "blueprint", "call", "voice", "export"];
-    const here = order.indexOf(scene === "building" ? "questions" : ["rules", "knowledge", "prompt", "stack"].includes(scene) ? "blueprint" : scene === "fix" ? "call" : scene);
+    // Same order as the panel: Flow → Rules → Facts → Prompt → Stack → Rehearse → (Fix) → Voice test → Export.
+    const order = JOURNEY.map((j) => j.s).filter((s) => s !== "bots" && (s !== "fix" || !!fix));
+    const here = Math.max(0, order.indexOf(scene === "building" ? "questions" : scene));
     const to = order[Math.min(order.length - 1, Math.max(0, here + dir))];
     if (to === scene) return say(t, "This is the last step");
     if (scene === "questions" && dir === 1) return build(t, "");
@@ -850,6 +864,7 @@ export default function Stage() {
     setLines([]);
     setChanged(null);
     go(d.bot ? "blueprint" : "questions");
+    say("", `Opened ${d.bot?.name ?? d.interview?.name ?? "the bot"}`);
   }
 
   function exportAs(id: string) {
@@ -915,6 +930,20 @@ export default function Stage() {
         setCounting(false);
       } else if (sel) clearMentions();
       else if (!text) back();
+    } else if (e.key === "Backspace" || e.key === "Delete") {
+      // An @mention goes away as one piece, like a chip, not letter by letter.
+      const box = e.currentTarget, at = box.selectionStart;
+      if (at !== box.selectionEnd) return;
+      for (const m of mentionsIn(text).found)
+        for (let i = text.indexOf(m.token); i >= 0; i = text.indexOf(m.token, i + 1)) {
+          const end = i + m.token.length, endSp = text[end] === " " ? end + 1 : end;
+          if (e.key === "Backspace" ? at > i && at <= endSp : at >= i && at < end) {
+            e.preventDefault();
+            setBox(text.slice(0, i) + text.slice(endSp));
+            requestAnimationFrame(() => inp.current?.setSelectionRange(i, i));
+            return;
+          }
+        }
     }
 
   }
@@ -954,7 +983,7 @@ export default function Stage() {
           <span className="stepname"><small>{progIdx + 1}/7</small>{PROGRESS[progIdx]?.[0]}</span>
         </div>
         <div className="topr">
-          <button className="pillbtn" onClick={() => go("bots")}><I d={IC.bots} />My bots</button>
+          <button className="pillbtn" onClick={() => goTo("", "bots")}><I d={IC.bots} />My bots</button>
           <button className="iconbtn" onClick={() => toggleTheme()} aria-label="Switch light or dark"><I d={theme === "dark" ? IC.sun : IC.moon} /></button>
         </div>
       </header>
