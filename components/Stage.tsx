@@ -10,7 +10,7 @@ import { Flow } from "./Flow";
 
 type Scene = "describe" | "questions" | "building" | "blueprint" | "rules" | "knowledge" | "prompt" | "stack" | "call" | "fix" | "voice" | "export" | "bots";
 type Broken = { rule_id: string; quote: string; why: string };
-type Line = { role: "caller" | "bot"; text: string; step_id?: string; broken?: Broken[]; ended?: boolean; fixed?: boolean; cut?: number };
+type Line = { role: "caller" | "bot"; text: string; step_id?: string; broken?: Broken[]; ended?: boolean; fixed?: boolean; cut?: number; unchecked?: boolean };
 type SRClass = new () => {
   lang: string; interimResults: boolean; continuous: boolean;
   onresult: (e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void; onerror: () => void;
@@ -78,7 +78,6 @@ const JOURNEY: { s: Scene; name: string; sub?: boolean; re: RegExp }[] = [
   { s: "export", name: "Export", re: /\b(export|download)\b/ },
   { s: "bots", name: "My bots", re: /\b(my bots|all bots|bots)\b/ },
 ];
-const GO = /^(please |ok(ay)? |now |and )?(go|move|take me|jump|switch|show|open|see|view|display|let'?s go|let me see|bring( up)?|back)\b/;
 const NEXT = /^(please |ok(ay)? |now |just )?((move|go) )?(forward|next|onward|ahead|on)( step| page| one)?$|^(continue|next step|move on|go ahead|proceed)$/;
 const PREV = /^(please |ok(ay)? |now |just )?((move|go|step) )?(back(ward)?|previous|before)( step| page| one)?$|^(wapas|venakki)$/;
 
@@ -104,17 +103,18 @@ const ttsLang = (s: string, bot: Bot): SpeakLang => {
   if (hi / all >= 0.33) return "hi-IN";
   return en || !bot.persona.voice.lang ? "en-IN" : (bot.persona.voice.lang as SpeakLang);
 };
-const undoRe = /^(undo|undo that|undo it|revert|wapas karo)\b/i;
-const replayRe = /^(replay|replay (it|that|the turn)|try (it )?again|again)\b/i;
+// Whole-input matches only: "Revert to English if they're confused" is an edit, not undo.
+const undoRe = /^(undo|undo that|undo it|undo the (last )?(change|fix)|revert( it| that)?|wapas karo)[.!]?$/i;
+const replayRe = /^(replay|replay (it|that|the (turn|line))|try (it )?again|again)[.!]?$/i;
 const backRe = /^(back|go back|previous|wapas|venakki)\.?$/i;
 const stopRe = /\b(stop|end|hang up|cut) (the )?call\b/i;
 const moreRe = /\bask (me )?more\b/i;
-const downloadRe = /^(please )?(download|save it|export it)\b/i;
+const downloadRe = /^(please )?(download|save it|export it)( (it|the|a|my)?\s*(json|backup|prompt|vapi|retell|pipecat|file|bot|everything)( file)?)?[.!]?$/i;
 
 function download(name: string, text: string, type: string) {
   const url = URL.createObjectURL(new Blob([text], { type }));
   Object.assign(document.createElement("a"), { href: url, download: name }).click();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 1000); // Safari cancels the download if this runs right away
 }
 
 const I = ({ d, w = 2 }: { d: string; w?: number }) => (
@@ -162,6 +162,10 @@ export default function Stage() {
   const [spoken, setSpoken] = useState(0);
   const spokenRef = useRef(0);
   const [barge, setBarge] = useState(true);
+  const epoch = useRef(0); // bumps when you change screen or bot; late AI answers for the old one are dropped
+  const sampleTimers = useRef<number[]>([]);
+  const clearSample = () => (sampleTimers.current.forEach(clearTimeout), (sampleTimers.current = []));
+  const starting = useRef(false);
   const sceneRef = useRef(scene);
   sceneRef.current = scene;
   const bargeRef = useRef(true);
@@ -202,7 +206,10 @@ export default function Stage() {
   // "@Greet", "@Rule 2", "@Fact 1", "@Last reply": parts of the bot named in the box. Changes go to them.
   const mentionables: (Target & { token: string })[] = bot
     ? [
-        ...bot.flow.steps.map((x, i) => ({ token: `@${x.label}`, kind: "step" as const, id: x.id, label: `step ${i + 1}` })),
+        ...bot.flow.steps.map((x, i, all) => ({
+          token: all.filter((y) => y.label === x.label).length > 1 ? `@${x.label} ${i + 1}` : `@${x.label}`, // two "End" steps stay apart
+          kind: "step" as const, id: x.id, label: `step ${i + 1}`,
+        })),
         ...bot.rules.map((x, i) => ({ token: `@Rule ${i + 1}`, kind: "rule" as const, id: x.id, label: `rule ${i + 1}` })),
         ...bot.knowledge.map((x, i) => ({ token: `@Fact ${i + 1}`, kind: "knowledge" as const, id: x.id, label: `fact ${i + 1}` })),
         ...(lastTurn.current ? [{ token: "@Last reply", kind: "turn" as const, id: undefined, text: lastTurn.current, label: "the reply that broke a rule" }] : []),
@@ -253,6 +260,16 @@ export default function Stage() {
     return () => clearInterval(t);
   }, [scene]);
 
+  // Leaving a rehearsal stops its spoken reply and any sample lines still queued.
+  const prevScene = useRef(scene);
+  useEffect(() => {
+    if (prevScene.current === "call" && scene !== "call") {
+      stopSpeaking();
+      clearSample();
+    }
+    prevScene.current = scene;
+  }, [scene]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // "Just changed" highlights last until you move to another screen (the edit's own jump does not count).
   const keepChanged = useRef(false);
   useEffect(() => {
@@ -302,7 +319,7 @@ export default function Stage() {
     const refocus = () =>
       setTimeout(() => {
         const a = document.activeElement;
-        if (a !== inp.current && !(a instanceof HTMLInputElement) && !String(getSelection())) inp.current?.focus({ preventScroll: true });
+        if (a !== inp.current && !(a instanceof HTMLInputElement) && !(a instanceof HTMLSelectElement) && !String(getSelection())) inp.current?.focus({ preventScroll: true });
       }, 0);
     // A paste that lands anywhere on the page goes into the box.
     // Every paste is inserted by us, wherever it lands. Some pastes (Wispr's quick Cmd+V) fire the
@@ -319,7 +336,9 @@ export default function Stage() {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.metaKey && e.key.toLowerCase() === "v") log("cmd+v", { active: document.activeElement?.tagName, inBox: document.activeElement === inp.current });
       if (document.activeElement === inp.current || e.metaKey || e.ctrlKey || e.altKey) return;
-      if (e.key.length === 1 && !(document.activeElement instanceof HTMLInputElement)) inp.current?.focus({ preventScroll: true });
+      const a = document.activeElement;
+      if (e.key === " " && (a instanceof HTMLButtonElement || a instanceof HTMLAnchorElement)) return; // Space presses the button
+      if (e.key.length === 1 && !(a instanceof HTMLInputElement) && !(a instanceof HTMLSelectElement)) inp.current?.focus({ preventScroll: true });
     };
     const onBlur = () => log("blur", { to: document.activeElement?.tagName });
     const onWinBlur = () => log("window-blur", { active: document.activeElement?.tagName });
@@ -374,6 +393,7 @@ export default function Stage() {
 
   function go(s: Scene, remember = true) {
     if (s === scene) return;
+    epoch.current++;
     if (remember) setPast((p) => [...p.slice(-20), scene]);
     setScene(s);
     try {
@@ -383,9 +403,13 @@ export default function Stage() {
     if (s === "describe") setBox("");
   }
   function back() {
-    const p = past[past.length - 1];
+    // Skip screens that can't show anything now (no bot yet, or the build screen).
+    const ok = (s: Scene) => s !== "building" && (s === "describe" || s === "bots" || (s === "questions" ? !!draft?.interview : !!bot));
+    const rest = [...past];
+    let p: Scene | undefined;
+    while ((p = rest.pop()) && !ok(p));
+    setPast(rest);
     if (!p) return;
-    setPast(past.slice(0, -1));
     setScene(p);
     setVig("");
   }
@@ -393,8 +417,10 @@ export default function Stage() {
 
   async function run<T>(label: string, fn: () => Promise<T>): Promise<T | undefined> {
     setBusy(label);
+    const e0 = epoch.current;
     try {
-      return await fn();
+      const r = await fn();
+      return epoch.current === e0 ? r : undefined; // you moved to another screen or bot meanwhile: ignore it
     } catch (e) {
       // Keep what was said in the box, so a busy AI never costs a re-dictation.
       if (lastSaid.current && !inp.current?.value.trim()) setBox(lastSaid.current);
@@ -482,6 +508,8 @@ export default function Stage() {
 
   async function startCall(t: string, who?: string) {
     if (!bot) return;
+    clearSample();
+    lastTurn.current = "";
     setPersona(who ?? "");
     setLines([]);
     setVig("");
@@ -495,7 +523,8 @@ export default function Stage() {
   }
 
   async function callerTurn(t: string, base: Line[] = lines, b: Bot = bot!) {
-    const history = base.map(({ role, text, step_id }) => ({ role, text, step_id }));
+    clearSample();
+    const history = base.slice(-20).map(({ role, text, step_id }) => ({ role, text, step_id }));
     const mine: Line[] = [...base, { role: "caller", text: t }];
     setLines(mine);
     setVig("");
@@ -507,18 +536,20 @@ export default function Stage() {
     const c = await run("Checking the rules", () =>
       post<{ broken: Broken[] }>("/api/check", { rules: b.rules.map(({ id, kind, text }) => ({ id, kind, text })), reply: r.reply, caller: t, knowledge: b.knowledge.map(({ text }) => ({ text })) }),
     );
+    const checked = !!c && !(c as { ai_off?: boolean }).ai_off;
     const broken = c?.broken ?? [];
-    const done = { ...line, broken };
+    const done = { ...line, broken, unchecked: !checked && !broken.length };
     setLines([...mine, done]);
     if (broken.length) {
       const ri = b.rules.findIndex((x) => x.id === broken[0].rule_id);
       const step = b.flow.steps.findIndex((s) => s.id === r.step_id);
       setVig("bad");
       lastTurn.current = `Caller: ${t}\nBot: ${r.reply}`;
-      setTimeout(() => setBox("@Last reply "), 0);
+      setTimeout(() => !inp.current?.value.trim() && setBox("@Last reply "), 0); // never wipe words you said meanwhile
       void step;
       say(t, `Broke rule ${ri + 1}. Say the fix.`);
-    } else say(t, r.ended ? "Call ended" : "Bot replied · rules kept");
+    } else if (!checked) say(t, "Bot replied. The AI rule check is busy, so only simple checks ran. Say “replay” to check again.", { err: true });
+    else say(t, r.ended ? "Call ended" : "Bot replied · rules kept");
     return done;
   }
 
@@ -528,7 +559,7 @@ export default function Stage() {
     if (i < 0) return startCall(t, persona);
     go("call");
     const res = await callerTurn(lines[i].text, lines.slice(0, i), bot);
-    if (res && !res.broken?.length) {
+    if (res && !res.broken?.length && !res.unchecked) {
       setLines((ls) => ls.map((l, k) => (k === ls.length - 1 ? { ...l, fixed: true } : l)));
       setVig("good");
       say(t, "Replayed with the fix · rule kept");
@@ -541,13 +572,17 @@ export default function Stage() {
   // One loop watches the mic the whole call: it ends your turn when you pause, and while the bot talks it
   // listens for you cutting in (barge-in) and stops the bot, like a real phone call.
   async function callStart() {
-    if (!bot || call.current) return;
+    if (!bot || call.current || starting.current) return;
+    starting.current = true; // a double click must not open two microphones
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
     } catch {
+      starting.current = false;
       return say("", "Allow the microphone to start the call", { err: true });
     }
+    starting.current = false;
+    if (sceneRef.current !== "voice" || call.current) return stream.getTracks().forEach((x) => x.stop()); // you left meanwhile
     const ac = new AudioContext();
     await ac.resume().catch(() => {});
     const an = ac.createAnalyser();
@@ -598,8 +633,11 @@ export default function Stage() {
       micEl.current?.style.setProperty("--lv", Math.min(1, rms * 14).toFixed(2));
       if (c.phase === "listening") {
         if (rms > Math.max(0.012, floor * 3)) [voiced, lastVoice] = [voiced + dt, now];
-        else floor = floor * 0.97 + rms * 0.03;
-        if (voiced > 250 && now - lastVoice > 750) {
+        else {
+          floor = floor * 0.97 + rms * 0.03;
+          if (now - lastVoice > 1500) voiced = Math.max(0, voiced - dt); // a lone cough fades out instead of adding up
+        }
+        if (voiced > 350 && now - lastVoice > 750) {
           voiced = 0;
           endTurn(c, lastVoice);
         } else if (!voiced && now - c.since > 15000) restartRec(c); // long silence: keep the clip small
@@ -682,6 +720,7 @@ export default function Stage() {
   }
 
   function restartRec(c: Call) {
+    c.since = performance.now(); // or this would fire again on every frame until the recorder stops
     c.sr?.abort();
     c.onClip = () => listen(c);
     c.rec?.stop();
@@ -720,7 +759,7 @@ export default function Stage() {
       c.history.push({ role: "caller", text: stt.text });
       setVlines([...c.history]);
       setInterim("");
-      const history = c.history.slice(0, -1).map((l) => (l.cut ? { ...l, text: `${l.text.slice(0, l.cut)}… (cut off by the caller)` } : l));
+      const history = c.history.slice(-21, -1).map((l) => (l.cut ? { ...l, text: `${l.text.slice(0, l.cut)}… (cut off by the caller)` } : l));
       const r = await post<{ reply: string; step_id: string; ended: boolean }>("/api/turn", { bot, history, text: stt.text });
       if (call.current !== c) return;
       const t2 = performance.now();
@@ -771,7 +810,9 @@ export default function Stage() {
     setCounting(false);
     if (!t) return;
     if (busy) {
-      queued.current = true; // said while busy: run it as soon as the current step ends
+      // Said while busy: run it as soon as the current step ends. A hint or button keeps its own words.
+      if (t !== inp.current?.value.trim()) later.current.push(t);
+      else queued.current = true;
       return;
     }
     setText("");
@@ -790,13 +831,17 @@ export default function Stage() {
     if (/^(clear|deselect|unselect|cancel)( (it|that|this|the selection|selection))?$/.test(mentionsIn(low).rest || low)) return setBox(""), say(t, "Cleared");
     // Screen controls are matched anywhere in the sentence and before navigation, so "drop the panel on the
     // left in the describe page" hides the panel instead of going to Describe.
-    const PANEL = "(panel|sidebar|side ?bar|running order|navigation)"; // not "menu" or "path": bots talk about those
-    if (words <= 14 && new RegExp(`\\b(hide|close|collapse|drop|remove|minimi[sz]e|get rid of|fold)\\b.*\\b${PANEL}\\b`).test(low)) return setPanel(false), say(t, "Panel hidden. Say “show the panel” to bring it back.");
-    if (words <= 14 && new RegExp(`\\b(show|open|bring back|expand|unhide)\\b.*\\b${PANEL}\\b`).test(low)) return setPanel(true), say(t, "Panel shown");
-    const theme = low.match(/\b(dark|light) (mode|theme)\b/);
+    // They must start the sentence ("drop the panel on the left…"), so "a bot that shows solar panel offers" stays a brief.
+    const PANEL = "(the )?(left |side )?(panel|sidebar|side ?bar|running order)\\b";
+    if (new RegExp(`^(please )?(hide|close|collapse|drop|remove|minimi[sz]e|fold|get rid of) ${PANEL}`).test(low)) return setPanel(false), say(t, "Panel hidden. Say “show the panel” to bring it back.");
+    if (new RegExp(`^(please )?(show|open|bring back|expand|unhide) ${PANEL}`).test(low))
+      return setPanel(true), say(t, innerWidth < 1100 ? "The panel needs a wider window. Use “next”, “back” or “go to rules”." : "Panel shown");
+    const theme = low.match(/^(switch to |turn on |go |use )?(the )?(dark|light) (mode|theme)\b/)?.slice(2);
     if (theme) return toggleTheme(theme[1] as "dark" | "light"), say(t, `${theme[1] === "dark" ? "Dark" : "Light"} mode`);
-    if (/\b(play|show)\b.*\b(sample|saved) call\b|^play (the )?(call|rehearsal)$/.test(low)) return bot ? playSample(t) : openSample(t);
-    if (/\b(sample|example|demo)( bot)?$/.test(low) && words <= 5 && scene !== "call") return openSample(t);
+    // On a call, what you say is the caller talking ("go ahead", "continue", "fix it!"), unless it's a clear command.
+    const onCall = scene === "call";
+    if (/^(play|show|watch)( me)? (the )?(sample|saved|demo) call$|^watch a bot break a rule$/.test(low)) return watchSample(t);
+    if (/^(show |open )?(me )?(the |a )?(sample|example|demo)( bot)?$/.test(low)) return openSample(t);
     if (/^(speak|say|read) (the )?(replies|answers)( out loud| aloud)?$|^(voice|sound) on$|^unmute$/.test(low)) return setTalk(true), say(t, "The bot will speak its replies");
     if (/^(mute|stop speaking|voice off|sound off|quiet)$/.test(low)) return setTalk(false), say(t, "Muted");
     if (/^(zoom in|bigger|make it bigger)$/.test(low)) return go("blueprint"), setZoom((z) => Math.min(2.2, z + 0.4)), say(t, "Zoomed in on the flow");
@@ -811,11 +856,16 @@ export default function Stage() {
       el?.scrollTo({ top, behavior: "smooth" });
       return say(t, el && el.scrollHeight > el.clientHeight ? `Scrolled ${dir}` : "Everything already fits on the screen");
     }
-    if (NEXT.test(low)) return step(t, 1);
-    if (PREV.test(low)) return back(), say(t, "Back");
-    if (words <= 7 && (GO.test(low) || words <= 2)) {
-      const place = JOURNEY.find((j) => j.re.test(low));
-      if (place && !(scene === "call" && place.s === "call")) return goTo(t, place.s);
+    if (!onCall && NEXT.test(low)) return step(t, 1);
+    if (!onCall && PREV.test(low)) return back(), say(t, "Back");
+    // A screen name moves you only right after a "go/show/open" word, or said on its own ("rules", "the prompt").
+    const target = low.match(/^(?:please |ok(?:ay)? |now )?(?:go to|go back to|back to|show(?: me)?|open|take me to|switch to|jump to|let me see)\s+(?:the |my )?(.+?)(?: page| screen| tab)?$/)?.[1]
+      ?? (words <= 3 && (!onCall || /^(the |my )?(flow|rules|facts|prompt|stack|changes|voice test|export|my bots)( page)?$/.test(low))
+        ? low.replace(/^(the |my )/, "").replace(/ (page|screen|tab)$/, "")
+        : undefined); // on a call only a bare screen name counts; "go ahead" or "fix it!" are the caller talking
+    if (target && target.split(" ").length <= 3) {
+      const place = JOURNEY.find((j) => new RegExp(`^(${j.re.source})$`).test(target) || new RegExp(`^${j.name.toLowerCase()}$`).test(target));
+      if (place && !(onCall && place.s === "call")) return goTo(t, place.s);
     }
 
     if (backRe.test(t)) return back(), say(t, "Back");
@@ -823,29 +873,31 @@ export default function Stage() {
     if (/^(dark|light)( mode)?$/i.test(t)) return toggleTheme(t.toLowerCase().startsWith("dark") ? "dark" : "light");
     if (scene === "fix" && replayRe.test(t)) return replay(t);
     if (scene === "voice" && stopRe.test(t)) return callEnd();
-    if (/\b(turn off|no|stop|disable)\b.*\binterrupt/i.test(low)) return setBarge(false), say(t, "Interruptions off: the bot finishes every line");
-    if (/\b(turn on|allow|enable|let me)\b.*\binterrupt/i.test(low)) return setBarge(true), say(t, "Interruptions on: talk over the bot to cut in");
-    if (scene === "voice" && /\b(start|begin|call|ring)\b.*\b(call|it|me)\b|^(start|call|go)$/i.test(low)) return void callStart();
-    if ((scene === "call" || scene === "fix") && stopRe.test(t)) return go("blueprint"), say(t, "Call stopped");
+    if (scene === "voice" && /^(turn off|no|stop|disable) (the )?(interruptions?|cutting in|cut in)$/.test(low)) return setBarge(false), say(t, "Interruptions off: the bot finishes every line");
+    if (scene === "voice" && /^(turn on|allow|enable|let me) (the )?(interruptions?|interrupt|cut in|cutting in)$/.test(low)) return setBarge(true), say(t, "Interruptions on: talk over the bot to cut in");
+    if (scene === "voice" && /^(start|begin|ring|make)( the| a)? call$|^(start|call me|call)$/i.test(low)) return void callStart();
+    if (/^(stop|end|hang up|cut)( the)? call[.!]?$|^hang up[.!]?$/i.test(t))
+      return scene === "call" || scene === "fix" ? (clearSample(), stopSpeaking(), go("blueprint"), say(t, "Call stopped")) : say(t, "No call is running right now.");
     const copyCmd = low.match(/^copy (the )?(prompt|vapi|retell)/);
     if (copyCmd && bot) return copyAs(copyCmd[2]), say(t, `Copied the ${copyCmd[2] === "prompt" ? "prompt" : `${copyCmd[2]} command`}`);
-    if (downloadRe.test(t) && bot) {
+    if (downloadRe.test(t) && bot && !onCall) {
       const x = EXPORTS.find((e) => low.includes(e.id) || (e.id === "json" && /\b(backup|json|everything)\b/.test(low))) ?? EXPORTS[0];
       return exportAs(x.id), say(t, `Downloaded ${x.name}`);
     }
-    if (scene === "bots") {
+    const opening = low.match(/^open (?:the |my )?(.+)$/)?.[1];
+    if (scene === "bots" && opening) {
       const list = listDrafts();
-      const m = /first/i.test(t) ? list[0] : list.find((d) => (d.bot?.name ?? d.interview?.name ?? "").toLowerCase().split(/\s+/).some((w) => w.length > 3 && t.toLowerCase().includes(w)));
+      const m = /^first( one| bot)?$/.test(opening) ? list[0] : list.find((d) => (d.bot?.name ?? d.interview?.name ?? "").toLowerCase().includes(opening.replace(/ bot$/, "")));
       if (m) return open(m), say(t, `Opened ${m.bot?.name ?? m.interview?.name}`);
     }
 
     const g = guessIntent(stage, t, pointing);
-    if (g?.intent === "navigate" && g.tab) return nav(t, g.tab);
+    if (g?.intent === "navigate" && g.tab && !onCall) return nav(t, g.tab);
     if (scene === "questions" && moreRe.test(t)) return askMore(t);
 
     if ((scene === "describe" || scene === "bots") && words < 4) return say(t, "Tell me a bit more: who does the bot call, and why?", { err: true });
     if (scene === "describe" || scene === "bots") return brief(t);
-    if (scene === "questions" && (/^(rehears|call it|test it|try it|show|open|go to|take me)/.test(low) || (words < 3 && g?.intent !== "build_now")))
+    if (scene === "questions" && ((words <= 4 && /^(rehears|call it|test it|try it|show|open|go to|take me)/.test(low)) || (words < 3 && g?.intent !== "build_now")))
       return say(t, "Answer the questions in one go, or say “just build it”.", { err: true });
     if (scene === "questions") return build(t, g?.intent === "build_now" ? "" : t);
     if (!bot) return brief(t);
@@ -908,6 +960,12 @@ export default function Stage() {
     say(t, `Showing ${tab === "flow" ? "the flow" : tab}`);
   }
 
+  // The saved call always runs on a fresh copy of the sample bot, so old edits never show "Broke rule 0".
+  function watchSample(t: string) {
+    open({ id: SAMPLE_ID, brief: SAMPLE_BRIEF, answers: [], bot: SAMPLE_BOT, updated: 0 });
+    playSample(t, SAMPLE_BOT);
+  }
+
   function openSample(t: string) {
     open(getDraft(SAMPLE_ID) ?? { id: SAMPLE_ID, brief: SAMPLE_BRIEF, answers: [], bot: SAMPLE_BOT, updated: 0 });
     say(t, "The sample bot. Say “play the sample call” to watch a rehearsal break a rule.");
@@ -922,21 +980,25 @@ export default function Stage() {
     setVig("");
     go("call");
     say(t, "Playing the saved sample call");
+    clearSample();
     SAMPLE_CALL.forEach((l, i) =>
-      setTimeout(() => {
+      sampleTimers.current.push(window.setTimeout(() => {
         if (sceneRef.current !== "call") return; // you left the call: stop playing it
         setLines(SAMPLE_CALL.slice(0, i + 1));
         if (l.broken) {
           setVig("bad");
           lastTurn.current = `Caller: ${SAMPLE_CALL[i - 1].text}\nBot: ${l.text}`;
-          setBox("@Last reply ");
+          if (!inp.current?.value.trim()) setBox("@Last reply ");
           say(t, "Broke rule 1. Say the fix, e.g. “if they ask for a refund, say the trial is free and offer a manager callback”.");
         }
-      }, 600 + i * 1700), // slow enough to read each line
+      }, 600 + i * 1700)), // slow enough to read each line
     );
   }
 
   function open(d: Draft) {
+    epoch.current++;
+    clearSample();
+    lastTurn.current = "";
     store(d);
     setUndo([]);
     setLines([]);
@@ -1002,7 +1064,9 @@ export default function Stage() {
     log("input", { type: ie.inputType, len: v.length, jump, scene });
     setText(v);
     clearTimeout(timer.current);
-    if (ie.inputType === "insertFromPaste" || ie.inputType === "insertReplacementText" || jump > 1) {
+    // Auto-send only for a paste or dictation (Wispr pastes the whole sentence), not for autocorrect or a
+    // tapped word suggestion on a phone, which change a few letters at a time.
+    if (ie.inputType === "insertFromPaste" || (ie.inputType !== "insertReplacementText" && jump >= 12)) {
       setCounting(true);
       timer.current = setTimeout(() => handleRef.current(v), 700);
     } else setCounting(false);
@@ -1038,7 +1102,7 @@ export default function Stage() {
   function pickStep(id: string, add = false, dbl = false) {
     if (!bot) return;
     const i = bot.flow.steps.findIndex((s) => s.id === id);
-    attach(`@${bot.flow.steps[i].label}`, add, dbl);
+    attach(mentionables.find((m) => m.kind === "step" && m.id === id)?.token ?? `@${bot.flow.steps[i].label}`, add, dbl);
   }
 
   // ---------- render ----------
@@ -1054,7 +1118,7 @@ export default function Stage() {
   return (
     <>
       <header className="top">
-        <div className="brand" onClick={() => nav("", "home")}>
+        <div className="brand" role="button" tabIndex={0} aria-label="Rehearse home" onClick={() => nav("", "home")} onKeyDown={(e) => e.key === "Enter" && nav("", "home")}>
           <span className="logo"><I d={IC.stage} w={1.8} /></span>
           <span className="word">Rehearse</span>
         </div>
@@ -1105,14 +1169,7 @@ export default function Stage() {
               <h1 className="h1s">Talk your voice bot <em>into shape.</em></h1>
               <p className="sub0">Say what the bot should do, in English, हिंदी, తెలుగు or a mix. Then rehearse a call, catch the line that breaks a rule, and fix it by saying so.</p>
               <div className="ctas">
-                <button className="btn" onClick={() => {
-                  // Straight to the call (no stop at the flow first), so nothing jumps on screen.
-                  const d = getDraft(SAMPLE_ID) ?? { id: SAMPLE_ID, brief: SAMPLE_BRIEF, answers: [], bot: SAMPLE_BOT, updated: 0 };
-                  store(d);
-                  setUndo([]);
-                  setChanged(null);
-                  playSample("watch a bot break a rule", d.bot);
-                }}>Watch a bot break a rule</button>
+                <button className="btn" onClick={() => watchSample("watch a bot break a rule")}>Watch a bot break a rule</button>
                 <span>or just start talking below</span>
               </div>
             </div>
@@ -1210,7 +1267,7 @@ export default function Stage() {
               <h2>What it knows</h2>
               <div className="facet">
                 {bot.knowledge.length ? (
-                  <ol>{bot.knowledge.map((k, i) => <li key={k.id} className={changed?.knowledge.includes(k.id) ? "chg" : ""} onClick={(e) => attach(`@Fact ${i + 1}`, e.shiftKey || e.metaKey)} onDoubleClick={() => attach(`@Fact ${i + 1}`, true, true)}>{k.text}</li>)}</ol>
+                  <ol>{bot.knowledge.map((k, i) => <li key={k.id} tabIndex={0} onKeyDown={(e) => e.key === "Enter" && attach(`@Fact ${i + 1}`, e.shiftKey)} className={changed?.knowledge.includes(k.id) ? "chg" : ""} onClick={(e) => attach(`@Fact ${i + 1}`, e.shiftKey || e.metaKey)} onDoubleClick={() => attach(`@Fact ${i + 1}`, true, true)}>{k.text}</li>)}</ol>
                 ) : <p className="empty">No facts yet. Say your prices, plans or policies.</p>}
                 {bot.tools.some((t) => t.enabled) && <p className="note">Tools: {bot.tools.filter((t) => t.enabled).map((t) => TOOL_SHELF[t.id] ?? t.id).join(" · ")}</p>}
               </div>
@@ -1296,7 +1353,7 @@ export default function Stage() {
                         <p>{c.summary}</p>
                         {c.before && <small>Fixed a reply{c.rule ? ` that broke ${c.rule.toLowerCase()}` : ""}: <s>{c.before}</s></small>}
                       </div>
-                      {i === 0 && <button className="btn ghost" onClick={() => handle("undo")}>Undo</button>}
+                      {i === 0 && undo.length > 0 && <button className="btn ghost" onClick={() => handle("undo")}>Undo</button>}
                     </li>
                   ))}
                   <li><b>v1</b><div><p>Built from your description.</p></div></li>

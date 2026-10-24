@@ -156,7 +156,9 @@ export function Flow({ bot, lit = [], cur, bad, good, chg = [], sel = [], mini, 
         ].filter(Boolean).join(" ");
         const label = s.label.length > 18 ? s.label.slice(0, 17) + "…" : s.label;
         return (
-          <g key={s.id} className={cls} style={{ ["--d" as string]: `${i * 0.07}s` }} onClick={(e) => onPick?.(s.id, e.shiftKey || e.metaKey)} onDoubleClick={() => onPick?.(s.id, true, true)}>
+          <g key={s.id} className={cls} style={{ ["--d" as string]: `${i * 0.07}s` }} onClick={(e) => onPick?.(s.id, e.shiftKey || e.metaKey)} onDoubleClick={() => onPick?.(s.id, true, true)}
+            tabIndex={onPick && !mini ? 0 : undefined} role={onPick && !mini ? "button" : undefined} aria-label={`Step ${num.get(s.id)}: ${s.label}`}
+            onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onPick?.(s.id, e.shiftKey))}>
             <title>{s.says}</title>
             <rect className="halo" x={p.x} y={p.y} width={W} height={H} rx={16} />
             <rect className="bx" x={p.x} y={p.y} width={W} height={H} rx={16} />
