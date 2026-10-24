@@ -22,8 +22,8 @@ const Body = z.object({
 
 const Reply = z.object({
   reply: z.string().trim().min(1).max(2000),
-  step_id: z.unknown().transform((v) => String(v ?? "").replace(/[[\]\s]/g, "")),
-  ended: z.unknown().transform((v) => v === true || v === "true"),
+  step_id: z.unknown().optional().transform((v) => String(v ?? "").replace(/[[\]\s]/g, "")),
+  ended: z.unknown().optional().transform((v) => v === true || v === "true"),
 });
 
 // It is speech: at most 300 characters (the voice cap), cut at the end of a sentence.

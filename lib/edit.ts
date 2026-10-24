@@ -241,7 +241,7 @@ export function applyOps(old: Bot, ops: unknown[]): { bot: Bot; changed: Changed
 }
 
 function limitMessage(path: string) {
-  if (path === "flow.steps") return "A call flow needs 3 to 10 steps. Remove or merge a step first.";
+  if (path === "flow.steps") return "A call flow needs 3 to 14 steps. Remove or merge a step first.";
   if (path === "flow.links") return "That makes too many branches (24 at most). Remove one first.";
   if (path === "rules") return "A bot can have 16 rules at most. Remove one first.";
   if (path === "knowledge") return "A bot can hold 20 facts at most. Remove one first.";

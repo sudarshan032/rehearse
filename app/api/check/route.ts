@@ -15,7 +15,7 @@ const Verdicts = z.object({
     .array(
       z.object({
         rule_id: z.coerce.string(),
-        broken: z.unknown().transform((v) => v === true || v === "true" || v === "yes"),
+        broken: z.unknown().optional().transform((v) => v === true || v === "true" || v === "yes"),
         quote: z.string().catch(""),
         why: z.string().catch(""),
       }),

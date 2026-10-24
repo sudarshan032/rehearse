@@ -46,8 +46,10 @@ export async function chatJSON<T extends z.ZodType>(messages: Msg[], schema: T):
           break;
         }
         const body = await res.json();
-        const parsed = schema.safeParse(JSON.parse(body.choices?.[0]?.message?.content ?? ""));
+        const content = body.choices?.[0]?.message?.content ?? "";
+        const parsed = schema.safeParse(JSON.parse(content));
         if (parsed.success) return { data: parsed.data, llm: `${p.name}:${model}` };
+        if (process.env.NODE_ENV !== "production") console.warn("[turn] wrong shape:", content.slice(0, 300));
         errs.push(`${p.name} returned the wrong shape`);
       } catch (e) {
         errs.push(`${p.name}: ${e instanceof Error ? e.name : "error"}`);

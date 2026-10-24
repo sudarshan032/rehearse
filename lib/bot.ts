@@ -70,8 +70,8 @@ export const BotDraft = z.object({
         }),
       )
       .min(3)
-      .max(10),
-    links: z.array(z.object({ from: id, to: id, when: text(60).default("always") })).max(24),
+      .max(14),
+    links: z.array(z.object({ from: id, to: id, when: text(60).default("always") })).max(32),
   }),
 });
 
@@ -89,6 +89,7 @@ export function finishBot(draft: z.infer<typeof BotDraft>, id: string, llm: stri
   const lang = draft.languages.find((l) => LANGS[l]) ?? "en";
   const bot: Bot = {
     ...draft,
+    name: draft.name.replace(/_/g, " "),
     rules: draft.rules.map((r) => ({ ...r, text: r.text.replace(/^(never|always)\b[:,]?\s*/i, "").replace(/^./, (c) => c.toUpperCase()) })),
     flow,
     id,

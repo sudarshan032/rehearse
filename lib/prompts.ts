@@ -28,7 +28,7 @@ export const BLUEPRINT_SYSTEM = `You are the builder inside Rehearse. You turn a
 ${VOICE_INPUT}
 
 Build the agent as JSON:
-- name: short and plain. type: "sales" | "support" | "personal" | "other".
+- name: short and plain, normal words with spaces (e.g. "Wispr Pro Sales Bot"). type: "sales" | "support" | "personal" | "other".
 - goal: one sentence. callers: who is on the other end and why.
 - languages: codes from "te" (Telugu), "hi" (Hindi), "en" (English), main language first. follow_caller_language: true unless the user said otherwise.
 - persona.tone: a few words (e.g. "warm, short sentences, never pushy").
