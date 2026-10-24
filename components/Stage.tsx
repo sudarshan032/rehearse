@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { langName, TOOL_SHELF, type Bot, type Interview } from "@/lib/bot";
 import { guessIntent, personaOf, type Stage as SayStage, type Tab } from "@/lib/say";
 import { getDraft, listDrafts, newId, post, saveDraft, type Draft } from "@/lib/store";
+import { SAMPLE_BOT, SAMPLE_BRIEF, SAMPLE_CALL, SAMPLE_ID } from "@/lib/sample";
 import { Flow } from "./Flow";
 
 type Scene = "describe" | "questions" | "building" | "blueprint" | "rules" | "knowledge" | "prompt" | "stack" | "call" | "fix" | "voice" | "export" | "bots";
@@ -19,7 +20,7 @@ const SAY_STAGE: Record<Scene, SayStage> = {
 };
 const TAB_SCENE: Partial<Record<Tab, Scene>> = { flow: "blueprint", rules: "rules", knowledge: "knowledge", prompt: "prompt", stack: "stack", rehearse: "call", voice: "voice", export: "export", bots: "bots", home: "describe" };
 const HINTS: Record<Scene, string[]> = {
-  describe: ["A sales bot that calls my free users", "నా saree shop కోసం ఒక support bot", "show my bots"],
+  describe: ["show me the sample", "A sales bot that calls my free users", "నా saree shop కోసం ఒక support bot"],
   questions: ["answer them all in one go", "just build it", "ask me more"],
   building: [],
   blueprint: ["rehearse as an angry customer", "show the rules", "after the greeting, ask if they are a student"],
@@ -64,6 +65,13 @@ const JOURNEY: { s: Scene; name: string; sub?: boolean; re: RegExp }[] = [
 const GO = /^(please |ok(ay)? |now |and )?(go|move|take me|jump|switch|show|open|see|view|display|let'?s go|let me see|bring( up)?|back)\b/;
 const NEXT = /^(please |ok(ay)? |now |just )?((move|go) )?(forward|next|onward|ahead|on)( step| page| one)?$|^(continue|next step|move on|go ahead|proceed)$/;
 const PREV = /^(please |ok(ay)? |now |just )?((move|go|step) )?(back(ward)?|previous|before)( step| page| one)?$|^(wapas|venakki)$/;
+
+// The intro sentence: [word, cut?]. Filler and the self-correction get cut, like Wispr does.
+const INTRO: [string, boolean][] = [
+  ["So", true], ["um,", true], ["I", false], ["want", false], ["a", false], ["bot", false], ["that", false], ["uh", true],
+  ["calls", false], ["my", true], ["users,", true], ["actually", true], ["no,", true], ["my", false], ["free", false], ["users", false],
+  ["in", false], ["Telugu,", false], ["and", false], ["never", false], ["promises", false], ["refunds.", false],
+];
 
 const langOf = (s: string) => (/[ఀ-౿]/.test(s) ? "TE" : /[ऀ-ॿ]/.test(s) ? "HI" : "EN");
 const ttsLang = (s: string, bot: Bot) => (/[ఀ-౿]/.test(s) ? "te-IN" : /[ऀ-ॿ]/.test(s) ? "hi-IN" : bot.languages.includes("en") ? "en-IN" : bot.persona.voice.lang);
@@ -164,6 +172,12 @@ export default function Stage() {
     setText(v);
     if (inp.current) inp.current.value = v;
     inp.current?.focus({ preventScroll: true });
+  };
+  const hl = useRef<HTMLDivElement>(null);
+  const marked = (v: string) => {
+    if (!mentionables.length || !v.includes("@")) return v;
+    const re = new RegExp(`(${mentionables.map((m) => m.token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`, "g");
+    return v.split(re).map((part, i) => (i % 2 ? <mark key={i} className={part === "@Last reply" ? "bad" : ""}>{part}</mark> : part));
   };
   const clearMentions = () => setBox(mentionsIn(text).rest);
   // Click: replace the mention (or add it if you already typed something). Double-click or Shift-click: add.
@@ -492,6 +506,8 @@ export default function Stage() {
     if (/^(clear|deselect|unselect|cancel)( (it|that|this|the selection|selection))?$/.test(mentionsIn(low).rest || low)) return setBox(""), say(t, "Cleared");
     if (/^(hide|close|collapse) (the )?(panel|path|sidebar|side panel)$/.test(low)) return setPanel(false), say(t, "Panel hidden. Say “show the panel” to bring it back.");
     if (/^(show|open) (the )?(panel|path|sidebar|side panel)$/.test(low)) return setPanel(true), say(t, "Panel shown");
+    if (/\b(play|show)\b.*\b(sample|saved) call\b|^play (the )?(call|rehearsal)$/.test(low)) return bot ? playSample(t) : openSample(t);
+    if (/\b(sample|example|demo)( bot)?$/.test(low) && words <= 5 && scene !== "call") return openSample(t);
     if (NEXT.test(low)) return step(t, 1);
     if (PREV.test(low)) return back(), say(t, "Back");
     if (words <= 7 && (GO.test(low) || words <= 2)) {
@@ -565,7 +581,7 @@ export default function Stage() {
 
   function nav(t: string, tab: Tab) {
     if (tab === "back") return back(), say(t, "Back");
-    if (tab === "sample") return say(t, "The sample bot is coming soon", { ans: true });
+    if (tab === "sample") return openSample(t);
     if (tab === "home") {
       setDraft(null);
       setLines([]);
@@ -581,6 +597,33 @@ export default function Stage() {
     if (s === "call") return startCall(t);
     go(s);
     say(t, `Showing ${tab === "flow" ? "the flow" : tab}`);
+  }
+
+  function openSample(t: string) {
+    open(getDraft(SAMPLE_ID) ?? { id: SAMPLE_ID, brief: SAMPLE_BRIEF, answers: [], bot: SAMPLE_BOT, updated: 0 });
+    say(t, "The sample bot. Say “play the sample call” to watch a rehearsal break a rule.");
+  }
+
+  // The saved rehearsal: plays line by line, no AI needed, ends on a broken rule.
+  function playSample(t: string) {
+    if (!bot) return;
+    setPersona("Telugu caller, asks about refunds");
+    setLines([]);
+    setFix(null);
+    setVig("");
+    go("call");
+    say(t, "Playing the saved sample call");
+    SAMPLE_CALL.forEach((l, i) =>
+      setTimeout(() => {
+        setLines(SAMPLE_CALL.slice(0, i + 1));
+        if (l.broken) {
+          setVig("bad");
+          lastTurn.current = `Caller: ${SAMPLE_CALL[i - 1].text}\nBot: ${l.text}`;
+          setBox("@Last reply ");
+          say(t, "Broke rule 1. Say the fix, e.g. “if they ask for a refund, say the trial is free and offer a manager callback”.");
+        }
+      }, 700 + i * 1100),
+    );
   }
 
   function open(d: Draft) {
@@ -712,9 +755,21 @@ export default function Stage() {
       <main className={panel ? "withpanel" : ""}>
         <section className={`scene ${scene === "describe" ? "on" : ""}`}>
           <div className="eyebrow">Rehearse · build a voice bot by talking</div>
-          <h1>What voice bot do you want to build?</h1>
-          <div className="tryline in">“A sales bot that calls my free users” · “నా saree shop కోసం ఒక support bot”</div>
+          {/* 2.5 s intro: messy speech, the filler gets cut, a clean bot comes out. */}
+          <div className="intro" aria-hidden>
+            <p className="said">
+              {INTRO.map(([w, cut], i) => (
+                <span key={i} className={cut ? "f" : "k"} style={{ ["--i" as string]: i }}>{w} </span>
+              ))}
+            </p>
+            <div className="built">
+              <span>1 Greet</span><i>→</i><span>2 Ask about the limit</span><i>→</i><span>3 Offer the Pro trial</span>
+              <b>Never promise a refund</b>
+            </div>
+          </div>
+          <h1 className="h1s">What voice bot do you want to build?</h1>
           <p className="sub0">Hold <kbd>fn</kbd> and talk, in English, हिंदी, తెలుగు or a mix. I’ll ask a few questions, then build it.</p>
+          <button className="samplebtn" onClick={() => openSample("show me the sample")}>See a finished sample →</button>
         </section>
 
         <section className={`scene ${scene === "questions" ? "on" : ""}`}>
@@ -919,8 +974,13 @@ export default function Stage() {
           {heard && <b className={heard.ans ? "ans" : ""}>{busy ? <span className="dots"><i /><i /><i /></span> : heard.res}</b>}
         </div>
         <div className="pill">
-          <textarea ref={inp} id="inp" rows={1} value={text} onInput={onInput} onChange={() => {}} onKeyDown={onKey}
-            placeholder={busy ? `${busy}…` : PLACEHOLDER[scene] ?? "Say what to do…"} aria-label="Talk or type to Rehearse" autoFocus />
+          <div className="field">
+            {/* Same text behind the box, with @mentions drawn as highlighted chips. */}
+            <div className="hl" ref={hl} aria-hidden>{marked(text)}{"\u200b"}</div>
+            <textarea ref={inp} id="inp" rows={1} value={text} onInput={onInput} onChange={() => {}} onKeyDown={onKey}
+              onScroll={(e) => hl.current && (hl.current.scrollTop = e.currentTarget.scrollTop)}
+              placeholder={busy ? `${busy}…` : PLACEHOLDER[scene] ?? "Say what to do…"} aria-label="Talk or type to Rehearse" autoFocus />
+          </div>
           <button className={`send ${counting ? "count" : ""}`} onClick={() => handle(text)} aria-label="Send">
             <I d={IC.up} w={2.4} />
             <svg className="cring" viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" /></svg>
