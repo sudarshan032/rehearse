@@ -11,3 +11,21 @@ No money and no paid credits were used (only Groq's free tier).
 - **Export**: Bot JSON, Prompt, Vapi, Retell, Pipecat. Say "download vapi".
 - **Mobile**: caption wraps; checked at 390 px.
 - **README draft**: docs/README_DRAFT.md (proof numbers to fill on 29 Oct).
+- **Free voice test** (no credits): your mic → Groq Whisper (free) → the bot (Groq) → KittenTTS in the browser for English, the Mac's own voices for Hindi (Lekha) and Telugu (Geeta). Murf and Deepgram are off unless `PAID_VOICE=1`. Measured in a test run: 1.92 s from letting go to the first sound (hearing 0.24 s, thinking 0.65 s, first sound 1.03 s). The first voice test loads the model (24 MB, about 7–11 s, once). Hold the mic button, or click to start and click to stop.
+- **Speak the replies in a rehearsal**: say "speak the replies" (or "mute").
+- **Whisper "Thank you."** on silence is treated as "heard nothing".
+- **Free AI fallbacks**: if gpt-oss-120b is rate-limited, it tries qwen3.8-27b, gpt-oss-20b, then OpenRouter free models.
+- **Zoom**: "zoom in", "zoom out", "fit".
+- **Queued dictation**: if you speak while it's busy, it runs after, instead of gluing two commands together.
+
+## Try this when you're back (2 minutes)
+1. Reload http://localhost:3000 and watch the intro.
+2. Say "show me the sample", then "play the sample call". Say the fix, then "replay".
+3. Click two steps (Shift-click the second), say a change. Say "undo".
+4. Say "voice test", hold the green button and ask something. (First time it loads the voice model.)
+5. Say "export", then "download vapi".
+
+## Known limits
+- Voice test was checked with a recorded file sent to Whisper and with the in-browser voice, but not with a real microphone (the test browser has none). Your first real try is the real check.
+- KittenTTS runs on the page's main thread: the page can pause about 1 s while it makes a sentence.
+- Groq's free limits: heavy testing can hit "busy"; the fallbacks usually cover it.

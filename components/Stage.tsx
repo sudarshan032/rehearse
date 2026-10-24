@@ -443,8 +443,12 @@ export default function Stage() {
   }
 
   // ---------- voice test (real mic → Whisper → LLM → free voice) ----------
+  // Hold to talk, or click once to start and once more to stop.
+  const pressedAt = useRef(0);
   async function micStart() {
-    if (rec || busy) return;
+    if (rec) return micStop(true);
+    if (busy) return;
+    pressedAt.current = Date.now();
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mr = new MediaRecorder(stream);
@@ -461,8 +465,9 @@ export default function Stage() {
       say("", "Allow the microphone to run a voice test", { err: true });
     }
   }
-  function micStop() {
+  function micStop(force = false) {
     if (!media.current) return;
+    if (!force && Date.now() - pressedAt.current < 350) return; // a click, not a hold: keep listening
     media.current.stop();
     media.current = null;
     setRec(false);
@@ -903,7 +908,7 @@ export default function Stage() {
         <section className={`scene ${scene === "call" ? "on" : ""}`}>
           {bot && (
             <>
-              <span className="persona"><I d={IC.target} />You are the caller{persona ? ` · ${persona}` : ""} · speak as the customer</span>
+              <span className="persona"><I d={IC.target} />You are the caller{persona ? ` · ${persona}` : ""} · {talk ? "bot speaks out loud · say “mute”" : "say “speak the replies” to hear the bot"}</span>
               <div className="minimap"><Flow bot={bot} mini lit={path} cur={lastBot?.step_id} bad={badStep} good={lastBot?.fixed ? lastBot.step_id : undefined} /></div>
               <div className="subs">
                 {lines.map((l, i) => (
@@ -945,10 +950,10 @@ export default function Stage() {
             <>
               <span className="live"><i />Voice test · your mic → Whisper (Groq) → {bot.stack.llm.split(":").slice(1).join(":")} → free voice</span>
               <button className={`micbtn ${rec ? "rec" : ""}`} aria-label="Hold to talk"
-                onPointerDown={micStart} onPointerUp={micStop} onPointerLeave={micStop}>
+                onPointerDown={micStart} onPointerUp={() => micStop()} onPointerLeave={() => micStop()}>
                 <I d={IC.mic} />
               </button>
-              <p className="note">{rec ? "Listening… let go when you finish" : "Hold the button and talk like a real caller"}</p>
+              <p className="note">{rec ? "Listening… let go (or click again) when you finish" : "Hold the button, or click to start and click to stop, and talk like a real caller"}</p>
               {lines.length > 0 && (
                 <div className="vlines">
                   {lines.slice(-2).map((l, i) => (
