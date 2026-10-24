@@ -33,3 +33,4 @@ wispr-flow-data-export*
 # Built models (rebuild with space/telugu-onnx/export.py)
 space/telugu-onnx/web/model/
 *.tsbuildinfo
+.vercel
