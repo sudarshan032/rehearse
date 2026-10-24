@@ -3,7 +3,9 @@ import type { Bot, Interview } from "./bot";
 
 export type Answer = { id: string; q: string; a: string };
 export type Change = { v: number; summary: string; before?: string; rule?: string; step?: string };
-export type Draft = { id: string; brief: string; interview?: Interview; answers: Answer[]; bot?: Bot; updated: number; log?: Change[] };
+export type Draft = { id: string; brief: string; interview?: Interview; answers: Answer[]; bot?: Bot; updated: number; log?: Change[];
+  // When each milestone first happened (ms). This is the "after" timing for docs/results.md, measured, not guessed.
+  times?: Partial<Record<"start" | "built" | "rehearsed" | "broke" | "fixed" | "voice" | "exported", number>> };
 
 const KEY = "rehearse:bots";
 

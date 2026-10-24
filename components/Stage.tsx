@@ -397,6 +397,16 @@ export default function Stage() {
     log("scene", { scene, busy });
   }, [scene, busy]);
 
+  // Records the first time a milestone happens for your own bots (not the sample).
+  type Milestone = keyof NonNullable<Draft["times"]>;
+  const mark = (k: Milestone) =>
+    setDraft((d) => {
+      if (!d || d.id === SAMPLE_ID || d.times?.[k]) return d;
+      const n = { ...d, times: { ...d.times, [k]: Date.now() } };
+      saveDraft(n);
+      return n;
+    });
+
   const store = useCallback((d: Draft) => {
     setDraft(d);
     saveDraft(d);
@@ -446,10 +456,11 @@ export default function Stage() {
 
   // ---------- the journey ----------
   async function brief(t: string) {
+    const t0 = Date.now();
     say(t, "Reading your brief…");
     const r = await run("Reading your brief", () => post<{ interview: Interview }>("/api/interview", { brief: t }));
     if (!r) return;
-    store({ id: newId(), brief: t, interview: r.interview, answers: [], updated: 0 });
+    store({ id: newId(), brief: t, interview: r.interview, answers: [], updated: 0, times: { start: t0 } });
     setUndo([]);
     setLines([]);
     say(t, `Got it: ${r.interview.name}. ${r.interview.questions.length} quick questions.`);
@@ -477,7 +488,7 @@ export default function Stage() {
     say(t, "Building the bot…");
     const r = await run("Drawing the call flow", () => post<{ bot: Bot }>("/api/blueprint", { id: d.id, brief: d.brief, answers: d.answers }));
     if (!r) return setScene("questions");
-    store({ ...d, bot: r.bot });
+    store({ ...d, bot: r.bot, times: { ...d.times, built: d.times?.built ?? Date.now() } });
     setChanged(null);
     say(t, `Built ${r.bot.flow.steps.length} steps, ${r.bot.rules.length} rules. Say “rehearse” to call it.`);
     setScene("blueprint");
@@ -551,6 +562,8 @@ export default function Stage() {
       post<{ broken: Broken[] }>("/api/check", { rules: b.rules.map(({ id, kind, text }) => ({ id, kind, text })), reply: r.reply, caller: t, knowledge: b.knowledge.map(({ text }) => ({ text })) }),
     );
     const checked = !!c && !(c as { ai_off?: boolean }).ai_off;
+    mark("rehearsed");
+    if (c?.broken?.length) mark("broke");
     const broken = c?.broken ?? [];
     const done = { ...line, broken, unchecked: !checked && !broken.length };
     setLines([...mine, done]);
@@ -574,6 +587,7 @@ export default function Stage() {
     go("call");
     const res = await callerTurn(lines[i].text, lines.slice(0, i), bot);
     if (res && !res.broken?.length && !res.unchecked) {
+      mark("fixed");
       setLines((ls) => ls.map((l, k) => (k === ls.length - 1 ? { ...l, fixed: true } : l)));
       setVig("good");
       say(t, "Replayed with the fix · rule kept");
@@ -784,6 +798,7 @@ export default function Stage() {
       const r = await post<{ reply: string; step_id: string; ended: boolean }>("/api/turn", { bot, history, text: stt.text });
       if (call.current !== c) return;
       const t2 = performance.now();
+      mark("voice");
       await botSays(r.reply, r.step_id, r.ended, [endedAt, t1, t2]);
       if (r.ended && c.phase === "speaking") return callEnd("The bot ended the call");
     } catch (e) {
@@ -899,6 +914,17 @@ export default function Stage() {
     if (scene === "voice" && /^(start|begin|ring|make)( the| a)? call$|^(start|call me|call)$/i.test(low)) return void callStart();
     if (/^(stop|end|hang up|cut)( the)? call[.!]?$|^hang up[.!]?$/i.test(t))
       return scene === "call" || scene === "fix" ? (clearSample(), stopSpeaking(), go("blueprint"), say(t, "Call stopped")) : say(t, "No call is running right now.");
+    // For docs/results.md: a table of every own bot's measured times, ready to paste.
+    if (/^copy (my |the )?(timings|times|results|numbers)$/.test(low)) {
+      const min = (a?: number, b?: number) => (a && b ? `${((b - a) / 60000).toFixed(1)}` : "–");
+      const rows = listDrafts().filter((d) => d.id !== SAMPLE_ID && d.times?.start).map((d) => {
+        const x = d.times!;
+        return `| ${new Date(x.start!).toISOString().slice(0, 10)} | ${d.bot?.name ?? d.interview?.name} | ${min(x.start, x.built)} | ${min(x.start, x.rehearsed)} | ${min(x.start, x.broke)} | ${min(x.start, x.fixed)} | ${min(x.start, x.exported)} | ${d.log?.length ?? 0} |`;
+      });
+      const md = ["| Date | Bot | Built (min) | First test call | First rule break caught | Fixed + retested | Exported | Changes |", "|---|---|---|---|---|---|---|---|", ...rows].join("\n");
+      navigator.clipboard?.writeText(md).catch(() => {});
+      return say(t, rows.length ? `Copied timings for ${rows.length} bots. Paste them into docs/results.md.` : "No timings yet: build a bot of your own first.");
+    }
     const copyCmd = low.match(/^copy (the )?(prompt|vapi|retell)/);
     if (copyCmd && bot) return copyAs(copyCmd[2]), say(t, `Copied the ${copyCmd[2] === "prompt" ? "prompt" : `${copyCmd[2]} command`}`);
     if (downloadRe.test(t) && bot && !onCall) {
@@ -1030,13 +1056,14 @@ export default function Stage() {
 
   function exportAs(id: string) {
     const x = EXPORTS.find((e) => e.id === id);
-    if (bot && x?.file) download(...x.file(bot));
+    if (bot && x?.file) download(...x.file(bot)), mark("exported");
   }
   const [copied, setCopied] = useState("");
   function copyAs(id: string) {
     const x = EXPORTS.find((e) => e.id === id);
     if (!bot || !x?.copy) return;
     navigator.clipboard?.writeText(x.copy(bot)).then(() => {
+      mark("exported");
       setCopied(id);
       setTimeout(() => setCopied(""), 2000);
     }, () => say("", "The browser blocked copying. Use Download instead.", { err: true }));
@@ -1558,6 +1585,9 @@ function BotList({ on, open, current }: { on: boolean; open: (d: Draft) => void;
             <small>{d.id === SAMPLE_ID ? "Sample · " : ""}{d.bot ? `v${d.bot.version}` : "questions"}{d.id === current ? " · open now" : ""}</small>
             <b>{d.bot?.name ?? d.interview?.name ?? "Untitled"}</b>
             <span>{(d.bot?.languages ?? d.interview?.understood.languages ?? []).map(langName).join(" · ")}</span>
+            {d.times?.start && (d.times.fixed ?? d.times.rehearsed) && (
+              <span className="took">Idea → {d.times.fixed ? "fixed and tested" : "first test call"} in {Math.max(1, Math.round(((d.times.fixed ?? d.times.rehearsed)! - d.times.start) / 60000))} min</span>
+            )}
           </button>
           {d.id !== SAMPLE_ID && d.id !== current && (
             // Two clicks to remove, so a stray click never loses a bot.
