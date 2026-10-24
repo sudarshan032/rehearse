@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Talk-through System Design (prototype)</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono&display=swap" rel="stylesheet">
+<style>
+/* Layout: big canvas left, conversation right; stacks on phones */
+:root{--bg:#0f1418;--panel:#151c22;--ink:#e6edf2;--muted:#8a98a5;--line:#26313a;--accent:#38bdf8;--ok:#34d399;--warn:#fbbf24;--bad:#f87171;--node:#1b252d;
+--display:"Space Grotesk",system-ui,sans-serif;--body:"IBM Plex Sans",system-ui,sans-serif;--mono:"IBM Plex Mono",monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--body);height:100vh;display:flex;flex-direction:column}
+header{display:flex;align-items:center;gap:14px;padding:12px 18px;border-bottom:1px solid var(--line)}
+header b{font:700 18px var(--display)}header small{color:var(--muted)}
+.wrap{flex:1;display:grid;grid-template-columns:1fr 360px;min-height:0}
+#stage{position:relative;overflow:hidden;background:radial-gradient(circle at 1px 1px,#1e2830 1px,transparent 0) 0 0/24px 24px}
+svg{width:100%;height:100%}
+.node rect{fill:var(--node);stroke:#33414c;stroke-width:1.5;rx:10}
+.node text{fill:var(--ink);font:600 13px var(--body);text-anchor:middle}
+.node .kind{fill:var(--muted);font:11px var(--mono)}
+.node.new rect{stroke:var(--accent);stroke-width:2.5}
+.node.down rect{stroke:var(--bad);stroke-width:2.5;fill:#2a1717}
+.node.hot rect{stroke:var(--warn);stroke-width:2.5}
+.edge{stroke:#3b4b57;stroke-width:2;fill:none}
+.edge.down{stroke:var(--bad);stroke-dasharray:6 6}
+.dot{fill:var(--accent)}
+aside{border-left:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;min-height:0}
+#log{flex:1;overflow:auto;padding:14px;display:flex;flex-direction:column;gap:10px}
+.m{padding:9px 12px;border-radius:10px;background:#1c252c;max-width:95%}
+.m.me{align-self:flex-end;background:#0c3a52}
+.m small{display:block;color:var(--muted);font:11px var(--mono);margin-bottom:2px}
+.box{border-top:1px solid var(--line);padding:12px}
+textarea{width:100%;min-height:64px;background:#0f151a;color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:10px;font:15px var(--body);resize:none}
+textarea:focus{outline:2px solid var(--accent)}
+.tries{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.tries button{background:#1c252c;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:3px 10px;font:12px var(--body);cursor:pointer}
+.tries button:hover{color:var(--ink)}
+.hint{color:var(--muted);font-size:12px;margin-top:6px}
+.badge{font:11px var(--mono);border:1px solid var(--line);border-radius:6px;padding:2px 6px;color:var(--muted)}
+@media (max-width:860px){.wrap{grid-template-columns:1fr;grid-template-rows:55vh auto}aside{border-left:0;border-top:1px solid var(--line)}}
+</style>
+</head>
+<body>
+<header><b>Talk-through System Design</b><span class="badge">prototype · sample design</span><small>Hold <b>fn</b>, speak a change, press Enter. Nothing to click on the canvas.</small></header>
+<div class="wrap">
+  <div id="stage"><svg id="svg"></svg></div>
+  <aside>
+    <div id="log"></div>
+    <div class="box">
+      <textarea id="cmd" placeholder="Hold fn and talk… e.g. “put a Redis cache between the API and Postgres”"></textarea>
+      <div class="tries">
+        <button>add a Redis cache between Voice Agent and Postgres</button>
+        <button>what if Sarvam STT goes down?</button>
+        <button>add Deepgram as a backup STT</button>
+        <button>send 10,000 calls a day</button>
+        <button>remove the connection from Voice Agent to Postgres</button>
+        <button>explain this design</button>
+      </div>
+      <div class="hint">Prototype: a few phrases are understood by simple rules. The real version uses an AI model and Wispr Flow.</div>
+    </div>
+  </aside>
+</div>
+<script>
+const N={}, E=[];
+function node(id,label,kind,x,y){N[id]={id,label,kind,x,y,state:''}}
+function edge(a,b){if(!E.find(e=>e.a===a&&e.b===b))E.push({a,b,state:''})}
+node('caller','Caller (phone)','client',110,90);node('sip','SIP trunk','telephony',110,240);
+node('agent','Voice Agent','pipecat',380,240);node('stt','Sarvam STT','speech→text',650,110);
+node('llm','LLM','gemini',650,240);node('tts','TTS','text→speech',650,370);node('db','Postgres','database',380,420);
+[['caller','sip'],['sip','agent'],['agent','stt'],['agent','llm'],['agent','tts'],['agent','db']].forEach(([a,b])=>edge(a,b));
+const svg=document.getElementById('svg');
+function draw(){
+ svg.innerHTML='';
+ E.forEach(e=>{const a=N[e.a],b=N[e.b];if(!a||!b)return;
+   const p=document.createElementNS('http://www.w3.org/2000/svg','path');p.setAttribute('d',`M${a.x},${a.y} C${(a.x+b.x)/2},${a.y} ${(a.x+b.x)/2},${b.y} ${b.x},${b.y}`);
+   p.setAttribute('class','edge '+e.state);p.id=`e_${e.a}_${e.b}`;svg.append(p);
+   if(!e.state){const c=document.createElementNS('http://www.w3.org/2000/svg','circle');c.setAttribute('r',3.5);c.setAttribute('class','dot');
+     const m=document.createElementNS('http://www.w3.org/2000/svg','animateMotion');m.setAttribute('dur',(1.6+Math.random()).toFixed(1)+'s');m.setAttribute('repeatCount','indefinite');
+     const mp=document.createElementNS('http://www.w3.org/2000/svg','mpath');mp.setAttribute('href','#'+p.id);m.append(mp);c.append(m);svg.append(c)}});
+ Object.values(N).forEach(n=>{const g=document.createElementNS('http://www.w3.org/2000/svg','g');g.setAttribute('class','node '+n.state);
+   g.innerHTML=`<rect x="${n.x-72}" y="${n.y-26}" width="144" height="52"></rect><text x="${n.x}" y="${n.y-2}">${n.label}</text><text class="kind" x="${n.x}" y="${n.y+15}">${n.kind}</text>`;svg.append(g)});
+}
+const log=document.getElementById('log');
+function say(who,t){const d=document.createElement('div');d.className='m'+(who==='me'?' me':'');d.innerHTML=`<small>${who==='me'?'You (via Wispr Flow)':'Design partner'}</small>${t}`;log.append(d);log.scrollTop=1e9}
+function clear(){Object.values(N).forEach(n=>n.state='');E.forEach(e=>e.state='')}
+function run(t){
+ say('me',t);clear();const s=t.toLowerCase();
+ if(/redis|cache/.test(s)){node('redis','Redis','cache',380,330);N.db.y=470;E.splice(E.findIndex(e=>e.a==='agent'&&e.b==='db'),1);edge('agent','redis');edge('redis','db');N.redis.state='new';
+   say('bot','Added <b>Redis</b> between Voice Agent and Postgres. Repeat callers\' order lookups now hit the cache first (about 1 ms instead of ~20 ms). Remember to expire entries when an order changes.')}
+ else if(/down|fail/.test(s)&&/sarvam|stt/.test(s)){N.stt.state='down';E.filter(e=>e.b==='stt').forEach(e=>e.state='down');
+   say('bot','<b>Sarvam STT is down.</b> Every call goes silent after the greeting: the agent can\'t hear the caller. There is no backup, so this is a single point of failure. Want me to add a second STT provider with automatic fallback?')}
+ else if(/deepgram|backup/.test(s)){node('dg','Deepgram STT','backup speech→text',650,20);edge('agent','dg');N.dg.state='new';
+   say('bot','Added <b>Deepgram</b> as a backup STT. The agent switches if Sarvam errors or is slower than 1.5 s. Note: Deepgram\'s Telugu is weaker, so expect more mistakes on Telugu calls while on backup.')}
+ else if(/10,?000|calls a day|load|traffic/.test(s)){N.llm.state='hot';N.agent.state='hot';
+   say('bot','10,000 calls a day is about 7 calls a minute on average, maybe 40 at peak. <b>Voice Agent</b> and <b>LLM</b> turn amber: one agent worker handles ~3 calls at once, so peak needs ~14 workers. Your SIP plan allows 3 concurrent calls, which is the real bottleneck.')}
+ else if(/remove/.test(s)&&/connection|link/.test(s)){const i=E.findIndex(e=>e.a==='agent'&&(e.b==='db'||e.b==='redis'));if(i>=0)E.splice(i,1);
+   say('bot','Removed the connection from Voice Agent to the database. Heads up: the agent can no longer look up orders, so “where is my order?” calls will fail.')}
+ else if(/explain/.test(s)){say('bot','A caller rings a phone number → the <b>SIP trunk</b> passes audio to the <b>Voice Agent</b>. The agent sends speech to <b>STT</b> to get text, asks the <b>LLM</b> what to say, turns the reply into voice with <b>TTS</b>, and reads or writes order data in <b>Postgres</b>. The weakest points: one STT provider and 3 concurrent SIP calls.')}
+ else say('bot','(Prototype) I only understand the sample phrases below. The real version understands any instruction, in English, Hindi or Telugu.');
+ draw();
+}
+document.querySelectorAll('.tries button').forEach(b=>b.onclick=()=>run(b.textContent));
+cmd.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();const v=cmd.value.trim();if(v){run(v);cmd.value=''}}});
+say('bot','This is a sample design: a Telugu customer-support voice bot. Talk to me to change it, break it, or ask why it works the way it does.');
+draw();
+</script>
+</body>
+</html>

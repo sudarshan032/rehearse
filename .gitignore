@@ -1,0 +1,35 @@
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# Wispr Flow local data and private material (never commit)
+*.sqlite
+*.sqlite-*
+wispr_copy/
+private/
+
+# Video and raw recordings
+video/raw/
+*.mov
+*.mp4
+
+# Build and tooling
+node_modules/
+dist/
+.vercel/
+.next/
+__pycache__/
+.venv/
+.DS_Store
+
+# Wispr data export (private)
+*.part
+wispr-flow-data-export*
+
+# Built models (rebuild with space/telugu-onnx/export.py)
+space/telugu-onnx/web/model/
+*.tsbuildinfo

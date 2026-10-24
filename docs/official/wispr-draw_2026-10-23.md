@@ -1,0 +1,46 @@
+# Snapshot: https://www.wemakedevs.org/wispr/draw
+
+- Fetched: 2026-10-23 (18:40 IST)
+- Method: plain HTTP fetch, visible text extracted (scripts, icons and nav removed). Animated numbers (percentages, prize amount) read from the page's own data and written in [brackets].
+- This is a copy for reference. The live page is the source of truth.
+
+---
+
+Daily draw | No Hands: The Wispr Challenge | WeMakeDevs x Wispr Flow
+× </>
+Overview </wispr>
+Project ideas </wispr/ideas>
+Schedule </wispr/schedule>
+Judging </wispr/judges>
+Leaderboard </wispr/leaderboard>
+Daily draw </wispr/draw>
+Sign in </sign-in?next=%2Fwispr%2Fdraw%3Fresume%3Dregister>
+Register
+Overview </wispr>
+Project ideas </wispr/ideas>
+Schedule </wispr/schedule>
+Judging </wispr/judges>
+Leaderboard </wispr/leaderboard>
+Daily draw </wispr/draw>
+Register
+Daily draw
+## $100 to a random project, every day
+Every project submitted is in the draw. One is picked each day until all ten prizes are out.
+Latest winner / 23 October
+### SayPDF: A PDF editor you talk to
+@gracey </gracey>
+SayPDF is a PDF editor you talk to. Say "remove blank pages, rotate page 5 left, change 45,000 to 60,000" and it's done. It runs fully in the browser, so the file never leaves your laptop. Hold the Wispr key, speak, let go, and the command runs the moment the text lands.
+Try it <https://graceydugar.github.io/voice-pdf-editor/>
+Draw 01 / 22 October
+### SpecFlow: Speak Decisions. Ship Clear Work.
+@leena </leena>
+SpecFlow is a voice-first engineering planning workspace. Speak a project brief, review an auto-generated Mermaid component architecture, inspect the specification and API contracts, and approve scoped sprint tickets with version history and review gates, keeping business rules, ownership, and security guardrails connected end-to-end.
+Try it <https://spec-flow-six.vercel.app/>
+- Draw 03: yet to run
+- Draw 04: yet to run
+- Draw 05: yet to run
+- Draw 06: yet to run
+- Draw 07: yet to run
+- Draw 08: yet to run
+- Draw 09: yet to run
+- Draw 10: yet to run

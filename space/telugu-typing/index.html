@@ -1,0 +1,27 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FlowFit Telugu Typing</title>
+<style>
+:root{--bg:#f7f8f6;--fg:#1c2220;--muted:#5d6763;--line:#d7ddd9;--accent:#0f6e64}
+@media (prefers-color-scheme:dark){:root{--bg:#131716;--fg:#e3e8e5;--muted:#99a49f;--line:#2e3734;--accent:#5cc2b4}}
+body{background:var(--bg);color:var(--fg);font:17px/1.6 system-ui,sans-serif;margin:0;padding:32px max(16px,env(safe-area-inset-left))}
+main{max-width:640px;margin:auto}h1{font-size:1.6rem;margin:0 0 4px}p{color:var(--muted)}
+textarea{width:100%;box-sizing:border-box;height:120px;font:20px/1.5 system-ui,sans-serif;padding:12px;border:1px solid var(--line);border-radius:8px;background:transparent;color:var(--fg)}
+#sug{display:flex;gap:8px;flex-wrap:wrap;min-height:44px;margin-top:10px}
+button{font:18px system-ui;padding:6px 14px;border:1px solid var(--line);border-radius:6px;background:transparent;color:var(--fg);cursor:pointer}
+button:first-child{border-color:var(--accent)}button:focus-visible{outline:2px solid var(--accent)}
+</style>
+<main><h1>Telugu typing</h1><p>Type Telugu in English letters and press space. Pick another suggestion if the first one is wrong.</p>
+<textarea id="box" placeholder="ela unnavu" autofocus></textarea><div id="sug"></div>
+<p>Model: AI4Bharat IndicXlit (MIT). Part of FlowFit, built for No Hands: The Wispr Challenge.</p></main>
+<script>
+const box=document.getElementById('box'),sug=document.getElementById('sug');
+async function convertLast(){
+  const v=box.value, m=v.match(/([A-Za-z]+)(\s)$/); if(!m) return;
+  const r=await fetch('/api/xlit?k=3&text='+encodeURIComponent(m[1])).then(r=>r.json()).catch(()=>null);
+  if(!r) return; const s=r.words[0].suggestions, start=v.length-m[0].length;
+  box.value=v.slice(0,start)+s[0]+m[2]; sug.innerHTML='';
+  s.forEach(x=>{const b=document.createElement('button');b.textContent=x;b.onclick=()=>{
+    const cur=box.value, i=cur.lastIndexOf(s[0]); if(i>=0) box.value=cur.slice(0,i)+x+cur.slice(i+s[0].length); box.focus()};sug.append(b)});
+}
+box.addEventListener('input',e=>{if(e.data===' ')convertLast()});
+</script></html>
