@@ -530,6 +530,7 @@ export default function Stage() {
     if (/^(zoom in|bigger|make it bigger)$/.test(low)) return setZoom((z) => Math.min(2.2, z + 0.4)), say(t, "Zoomed in");
     if (/^(zoom out|smaller|make it smaller)$/.test(low)) return setZoom((z) => Math.max(1, z - 0.4)), say(t, "Zoomed out");
     if (/^(fit|fit (it|the flow)|reset zoom|whole flow)$/.test(low)) return setZoom(1), say(t, "Whole flow");
+    if (words <= 6 && /\b(start|make|create|build|begin)( a| an)? (new|another|fresh) (bot|one|agent)\b|^new bot$/.test(low)) return nav(t, "home");
     if (NEXT.test(low)) return step(t, 1);
     if (PREV.test(low)) return back(), say(t, "Back");
     if (words <= 7 && (GO.test(low) || words <= 2)) {
@@ -556,6 +557,7 @@ export default function Stage() {
     if (g?.intent === "navigate" && g.tab) return nav(t, g.tab);
     if (scene === "questions" && moreRe.test(t)) return askMore(t);
 
+    if ((scene === "describe" || scene === "bots") && words < 4) return say(t, "Tell me a bit more: who does the bot call, and why?", { err: true });
     if (scene === "describe" || scene === "bots") return brief(t);
     if (scene === "questions" && (/^(rehears|call it|test it|try it|show|open|go to|take me)/.test(low) || (words < 3 && g?.intent !== "build_now")))
       return say(t, "Answer the questions in one go, or say “just build it”.", { err: true });
@@ -817,14 +819,25 @@ export default function Stage() {
                   </li>
                 ))}
               </ol>
+              {u && (u.languages.length > 0 || u.never.length > 0) && (
+                <div className="known2">
+                  {u.languages.map((l) => <span key={l}>{langName(l)}</span>)}
+                  {u.never.map((r) => <span key={r} className="bad">Never: {r}</span>)}
+                  {u.always.map((r) => <span key={r} className="ok">Always: {r}</span>)}
+                </div>
+              )}
             </>
           )}
         </section>
 
         <section className={`scene ${scene === "building" ? "on" : ""}`}>
-          <h2>Drawing the call flow</h2>
-          <div className="dots"><i /><i /><i /></div>
-          <p className="sub0">Steps, rules, facts and the prompt, from what you said.</p>
+          <h2>Building your bot</h2>
+          {/* Staged ticks while the AI works (about 2 s), so the wait feels like progress. */}
+          <ul className="stages" key={String(scene === "building")}>
+            {["Reading what you said", "Drawing the call flow", "Writing the rules", "Collecting the facts", "Compiling the prompt"].map((x, i) => (
+              <li key={x} style={{ ["--i" as string]: i }}>{x}</li>
+            ))}
+          </ul>
         </section>
 
         <section className={`scene ${scene === "blueprint" ? "on" : ""}`}>
