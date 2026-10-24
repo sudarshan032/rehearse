@@ -214,3 +214,4 @@ body.listening .tries{opacity:0}
 .xg.x5{grid-template-columns:repeat(5,1fr)} @media (max-width:900px){.xg.x5{grid-template-columns:1fr 1fr}}
 .x em{font-size:11.5px}
 @media (max-width:760px){.cap .hl,.cap .lang{display:none}.cap b{white-space:normal;text-align:center;font-size:14px}.cap q{max-width:100%;font-size:14px}main{bottom:200px}}
+.flowbig.zoomed{overflow:auto} .flowbig.zoomed svg{max-height:none}

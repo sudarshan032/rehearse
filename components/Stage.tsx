@@ -24,7 +24,7 @@ const HINTS: Record<Scene, string[]> = {
   describe: ["show me the sample", "A sales bot that calls my free users", "నా saree shop కోసం ఒక support bot"],
   questions: ["answer them all in one go", "just build it", "ask me more"],
   building: [],
-  blueprint: ["rehearse as an angry customer", "show the rules", "after the greeting, ask if they are a student"],
+  blueprint: ["rehearse as an angry customer", "show the rules", "zoom in"],
   rules: ["drop rule 3", "never share prices on WhatsApp", "back to the flow"],
   knowledge: ["add: the trial is 14 days", "show the prompt", "back to the flow"],
   prompt: ["make it more polite", "show the stack", "back to the flow"],
@@ -114,6 +114,7 @@ export default function Stage() {
   const [busy, setBusy] = useState("");
   const [heard, setHeard] = useState<{ q: string; res: string; err?: boolean; ans?: boolean } | null>(null);
   const [panel, setPanel] = useState(true);
+  const [zoom, setZoom] = useState(1);
   const [changed, setChanged] = useState<EditResult["changed"] & { summary: string } | null>(null);
   const [undo, setUndo] = useState<Bot[]>([]);
   const [lines, setLines] = useState<Line[]>([]);
@@ -515,6 +516,9 @@ export default function Stage() {
     if (/^(show|open) (the )?(panel|path|sidebar|side panel)$/.test(low)) return setPanel(true), say(t, "Panel shown");
     if (/\b(play|show)\b.*\b(sample|saved) call\b|^play (the )?(call|rehearsal)$/.test(low)) return bot ? playSample(t) : openSample(t);
     if (/\b(sample|example|demo)( bot)?$/.test(low) && words <= 5 && scene !== "call") return openSample(t);
+    if (/^(zoom in|bigger|make it bigger)$/.test(low)) return setZoom((z) => Math.min(2.2, z + 0.4)), say(t, "Zoomed in");
+    if (/^(zoom out|smaller|make it smaller)$/.test(low)) return setZoom((z) => Math.max(1, z - 0.4)), say(t, "Zoomed out");
+    if (/^(fit|fit (it|the flow)|reset zoom|whole flow)$/.test(low)) return setZoom(1), say(t, "Whole flow");
     if (NEXT.test(low)) return step(t, 1);
     if (PREV.test(low)) return back(), say(t, "Back");
     if (words <= 7 && (GO.test(low) || words <= 2)) {
@@ -816,8 +820,10 @@ export default function Stage() {
           {bot && (
             <>
               <div className="eyebrow">{bot.name} · v{bot.version} · {bot.languages.map(langName).join(" · ")} · click a step, then say the change</div>
-              <div className="flowbig" key={`${bot.id}-${scene}`}>
-                <Flow bot={bot} chg={changed?.steps} sel={targets.filter((x) => x.kind === "step").map((x) => x.id!)} onPick={pickStep} />
+              <div className={`flowbig ${zoom > 1 ? "zoomed" : ""}`} key={`${bot.id}-${scene}`}>
+                <div style={{ width: `${zoom * 100}%` }}>
+                  <Flow bot={bot} chg={changed?.steps} sel={targets.filter((x) => x.kind === "step").map((x) => x.id!)} onPick={pickStep} />
+                </div>
               </div>
               <div className="chg">{changed && <span>{changed.summary}</span>}</div>
             </>
