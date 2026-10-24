@@ -22,7 +22,7 @@ export default function BotPage() {
   if (!bot) return <main className="page muted">Loading…</main>;
 
   const label = (sid: string) => bot.flow.steps.find((s) => s.id === sid)?.label ?? sid;
-  const source = (s: string) => (s === "suggested" ? "suggested by the builder" : s === "brief" ? "from your brief" : `from your answer to ${s.toUpperCase()}`);
+  const source = (s: string) => (s === "suggested" ? "suggested by the builder" : s === "brief" ? "from your brief" : s === "answer" ? "from your answer" : `from your answer to ${s.toUpperCase()}`);
 
   return (
     <main className="page">
