@@ -211,3 +211,5 @@ body.listening .tries{opacity:0}
 .field .hl{position:absolute;inset:0;color:transparent;overflow:hidden;pointer-events:none}
 .field .hl mark{color:transparent;background:color-mix(in oklab,var(--warn) 55%,transparent);border-radius:6px;box-shadow:0 0 0 2px color-mix(in oklab,var(--warn) 55%,transparent),0 0 14px color-mix(in oklab,var(--warn) 60%,transparent)}
 .field .hl mark.bad{background:color-mix(in oklab,var(--bad) 60%,transparent);box-shadow:0 0 0 2px color-mix(in oklab,var(--bad) 60%,transparent),0 0 14px color-mix(in oklab,var(--bad) 60%,transparent)}
+.xg.x5{grid-template-columns:repeat(5,1fr)} @media (max-width:900px){.xg.x5{grid-template-columns:1fr 1fr}}
+.x em{font-size:11.5px}

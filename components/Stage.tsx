@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { langName, TOOL_SHELF, type Bot, type Interview } from "@/lib/bot";
 import { guessIntent, personaOf, type Stage as SayStage, type Tab } from "@/lib/say";
 import { getDraft, listDrafts, newId, post, saveDraft, type Draft } from "@/lib/store";
+import { EXPORTS } from "@/lib/export";
 import { SAMPLE_BOT, SAMPLE_BRIEF, SAMPLE_CALL, SAMPLE_ID } from "@/lib/sample";
 import { Flow } from "./Flow";
 
@@ -80,7 +81,7 @@ const replayRe = /^(replay|replay (it|that|the turn)|try (it )?again|again)\b/i;
 const backRe = /^(back|go back|previous|wapas|venakki)\.?$/i;
 const stopRe = /\b(stop|end|hang up|cut) (the )?call\b/i;
 const moreRe = /\bask (me )?more\b/i;
-const downloadRe = /\b(download|save it|export it)\b/i;
+const downloadRe = /^(please )?(download|save it|export it)\b/i;
 
 function download(name: string, text: string, type: string) {
   const url = URL.createObjectURL(new Blob([text], { type }));
@@ -520,7 +521,10 @@ export default function Stage() {
     if (/^(dark|light)( mode)?$/i.test(t)) return toggleTheme(t.toLowerCase().startsWith("dark") ? "dark" : "light");
     if (scene === "fix" && replayRe.test(t)) return replay(t);
     if ((scene === "call" || scene === "fix") && stopRe.test(t)) return go("blueprint"), say(t, "Call stopped");
-    if (scene === "export" && downloadRe.test(t) && bot) return exportJSON(), say(t, "Downloaded");
+    if (downloadRe.test(t) && bot) {
+      const x = EXPORTS.find((e) => low.includes(e.name.toLowerCase()) || low.includes(e.id)) ?? EXPORTS[0];
+      return exportAs(x.id), say(t, `Downloaded ${x.name}`);
+    }
     if (scene === "bots") {
       const list = listDrafts();
       const m = /first/i.test(t) ? list[0] : list.find((d) => (d.bot?.name ?? d.interview?.name ?? "").toLowerCase().split(/\s+/).some((w) => w.length > 3 && t.toLowerCase().includes(w)));
@@ -634,8 +638,9 @@ export default function Stage() {
     go(d.bot ? "blueprint" : "questions");
   }
 
-  function exportJSON() {
-    if (bot) download(`${slug(bot.name)}.json`, JSON.stringify(bot, null, 2), "application/json");
+  function exportAs(id: string) {
+    const x = EXPORTS.find((e) => e.id === id);
+    if (bot && x) download(...(x.file(bot) as [string, string, string]));
   }
 
   function toggleTheme(t?: string) {
@@ -921,7 +926,7 @@ export default function Stage() {
                 <I d={IC.mic} />
               </button>
               <p className="note">{rec ? "Listening… let go when you finish" : "Hold the button and talk like a real caller"}</p>
-              <div className="big"><b>{timing ? `${(timing.total / 1000).toFixed(2)} s` : "–"}</b><span>to the bot’s first sound</span></div>
+              <div className="big"><b>{timing ? `${(timing.total / 1000).toFixed(2)} s` : "0.00 s"}</b><span>to the bot’s first sound</span></div>
               {timing && (
                 <>
                   <div className="bar">
@@ -946,9 +951,12 @@ export default function Stage() {
             <>
               <div className="eyebrow">Export · design here, run anywhere</div>
               <h2>Take it with you.</h2>
-              <div className="xg" style={{ gridTemplateColumns: "1fr 1fr" }}>
-                <button className="x on" onClick={exportJSON}><b>Bot JSON</b><small>flow, rules, facts, stack</small><em><I d={IC.dl} />say “download”</em></button>
-                <button className="x" onClick={() => download(`${slug(bot.name)}-prompt.md`, bot.prompt, "text/markdown")}><b>Prompt</b><small>Markdown, paste anywhere</small><em><I d={IC.dl} />click to save</em></button>
+              <div className="xg x5">
+                {EXPORTS.map((x, i) => (
+                  <button key={x.id} className={`x ${i === 0 ? "on" : ""}`} style={{ ["--d" as string]: `${i * 0.06}s` }} onClick={() => exportAs(x.id)}>
+                    <b>{x.name}</b><small>{x.note}</small><em><I d={IC.dl} />say “download {x.name.toLowerCase()}”</em>
+                  </button>
+                ))}
               </div>
               <div className="stats" style={{ gridTemplateColumns: "repeat(3,1fr)" }}>
                 <div><b>v{bot.version}</b><small>versions</small></div>
@@ -1004,7 +1012,7 @@ function BotList({ on, open }: { on: boolean; open: (d: Draft) => void }) {
     <div className="bots">
       {list.map((d, i) => (
         <button key={d.id} className="tile" style={{ ["--d" as string]: `${i * 0.05}s` }} onClick={() => open(d)}>
-          <small>{d.bot ? `v${d.bot.version}` : "questions"}</small>
+          <small>{d.id === SAMPLE_ID ? "Sample · " : ""}{d.bot ? `v${d.bot.version}` : "questions"}</small>
           <b>{d.bot?.name ?? d.interview?.name ?? "Untitled"}</b>
           <span>{(d.bot?.languages ?? d.interview?.understood.languages ?? []).map(langName).join(" · ")}</span>
         </button>
