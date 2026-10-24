@@ -19,11 +19,25 @@ type SRClass = new () => {
 type Call = {
   stream: MediaStream; ac: AudioContext; an: AnalyserNode; history: Line[];
   phase: "listening" | "thinking" | "speaking"; since: number; lang: string;
-  rec?: MediaRecorder; sr?: InstanceType<SRClass>; onClip?: (b: Blob) => void; loud?: boolean;
+  sr?: InstanceType<SRClass>; loud?: boolean; loudSince?: number; turnStart?: number;
+  pcm: { t: number; d: Float32Array }[];
 };
 const srClass = () =>
   typeof window === "undefined" ? undefined
     : ((window as unknown as { SpeechRecognition?: SRClass }).SpeechRecognition ?? (window as unknown as { webkitSpeechRecognition?: SRClass }).webkitSpeechRecognition);
+// Raw mic sound → a small 16 kHz WAV file for Whisper.
+function toWav(parts: Float32Array[], rate: number) {
+  const all = new Float32Array(parts.reduce((n, p) => n + p.length, 0));
+  parts.reduce((o, p) => (all.set(p, o), o + p.length), 0);
+  const step = rate / 16000, n = Math.floor(all.length / step);
+  const buf = new DataView(new ArrayBuffer(44 + n * 2));
+  const str = (o: number, x: string) => [...x].forEach((ch, i) => buf.setUint8(o + i, ch.charCodeAt(0)));
+  str(0, "RIFF"); buf.setUint32(4, 36 + n * 2, true); str(8, "WAVEfmt "); buf.setUint32(16, 16, true);
+  buf.setUint16(20, 1, true); buf.setUint16(22, 1, true); buf.setUint32(24, 16000, true); buf.setUint32(28, 32000, true);
+  buf.setUint16(32, 2, true); buf.setUint16(34, 16, true); str(36, "data"); buf.setUint32(40, n * 2, true);
+  for (let i = 0; i < n; i++) buf.setInt16(44 + i * 2, Math.max(-1, Math.min(1, all[Math.floor(i * step)])) * 0x7fff, true);
+  return new Blob([buf], { type: "audio/wav" });
+}
 const srLang = (l: string) => (l === "te" ? "te-IN" : l === "hi" ? "hi-IN" : "en-IN");
 type Target = { kind: "step" | "rule" | "knowledge" | "prompt" | "turn"; id?: string; text?: string; label: string };
 type EditResult = { bot: Bot; summary: string; changed: { steps: string[]; rules: string[]; knowledge: string[] }; applied: number };
@@ -587,8 +601,20 @@ export default function Stage() {
     await ac.resume().catch(() => {});
     const an = ac.createAnalyser();
     an.fftSize = 1024;
-    ac.createMediaStreamSource(stream).connect(an);
-    const c: Call = { stream, ac, an, history: [], phase: "thinking", since: performance.now(), lang: srLang(bot.languages[0]) };
+    const src = ac.createMediaStreamSource(stream);
+    src.connect(an);
+    const c: Call = { stream, ac, an, history: [], phase: "thinking", since: performance.now(), lang: srLang(bot.languages[0]), pcm: [] };
+    // The mic is kept as raw sound for the last 30 s, so a turn can start a moment BEFORE it was detected:
+    // your first words are never lost, even when you cut in mid-sentence.
+    // ponytail: ScriptProcessor is old but works everywhere with no extra file; move to an AudioWorklet if it is removed.
+    const tap = ac.createScriptProcessor(4096, 1, 1);
+    tap.onaudioprocess = (e) => {
+      const d = new Float32Array(e.inputBuffer.getChannelData(0));
+      c.pcm.push({ t: performance.now() - (d.length / ac.sampleRate) * 1000, d });
+      while (c.pcm.length && c.pcm[0].t < performance.now() - 30_000) c.pcm.shift();
+    };
+    src.connect(tap);
+    tap.connect(ac.destination); // it outputs silence; it only needs to be connected to run
     call.current = c;
     setVlines([]);
     setInterim("");
@@ -605,10 +631,6 @@ export default function Stage() {
     if (!c) return;
     call.current = null;
     cancelAnimationFrame(raf.current);
-    if (c.rec?.state === "recording") {
-      c.rec.onstop = null;
-      c.rec.stop();
-    }
     c.sr?.abort();
     c.stream.getTracks().forEach((t) => t.stop());
     c.ac.close().catch(() => {});
@@ -632,18 +654,26 @@ export default function Stage() {
       if (phase !== c.phase) [phase, echo] = [c.phase, 0];
       micEl.current?.style.setProperty("--lv", Math.min(1, rms * 14).toFixed(2));
       if (c.phase === "listening") {
-        if (rms > Math.max(0.012, floor * 3)) [voiced, lastVoice] = [voiced + dt, now];
-        else {
+        if (rms > Math.max(0.012, floor * 3)) {
+          if (!voiced) c.turnStart ??= now; // where your words begin
+          [voiced, lastVoice] = [voiced + dt, now];
+        } else {
           floor = floor * 0.97 + rms * 0.03;
-          if (now - lastVoice > 1500) voiced = Math.max(0, voiced - dt); // a lone cough fades out instead of adding up
+          if (now - lastVoice > 1500) {
+            voiced = Math.max(0, voiced - dt); // a lone cough fades out instead of adding up
+            if (!voiced) c.turnStart = undefined;
+          }
         }
         if (voiced > 350 && now - lastVoice > 750) {
           voiced = 0;
           endTurn(c, lastVoice);
-        } else if (!voiced && now - c.since > 15000) restartRec(c); // long silence: keep the clip small
+        }
       } else if (c.phase === "speaking" && bargeRef.current) {
         // The bot's own voice comes back through the mic; only a voice clearly louder than that counts as you.
         c.loud = rms > Math.max(0.03, echo * 1.15, floor * 4);
+        if (c.loud && !c.loudSince) c.loudSince = now; // when you may have started talking over the bot
+        if (!c.loud && now - lastVoice > 400) c.loudSince = undefined;
+        if (c.loud) lastVoice = now;
         if (now - c.since < 350 || rms < Math.max(0.04, echo * 1.6, floor * 4)) {
           echo = Math.max(echo * 0.995, rms);
           voiced = Math.max(0, voiced - dt);
@@ -662,18 +692,14 @@ export default function Stage() {
     tick();
   }
 
-  function listen(c: Call) {
+  function listen(c: Call, from?: number) {
     if (call.current !== c) return;
+    if (from) c.turnStart = from;
     c.phase = "listening";
     c.since = performance.now();
+    if (!from) c.turnStart = undefined;
     setLive("listening");
     setInterim("");
-    const rec = new MediaRecorder(c.stream);
-    const chunks: Blob[] = [];
-    rec.ondataavailable = (e) => chunks.push(e.data);
-    rec.onstop = () => c.onClip?.(new Blob(chunks, { type: rec.mimeType }));
-    c.rec = rec;
-    rec.start();
     // Live words while you talk, from the browser's own speech recognition (free). Whisper still makes the final text.
     const SR = srClass();
     if (SR) {
@@ -719,19 +745,14 @@ export default function Stage() {
     } catch {}
   }
 
-  function restartRec(c: Call) {
-    c.since = performance.now(); // or this would fire again on every frame until the recorder stops
-    c.sr?.abort();
-    c.onClip = () => listen(c);
-    c.rec?.stop();
-  }
-
   function endTurn(c: Call, endedAt: number) {
     c.phase = "thinking";
     setLive("thinking");
     c.sr?.stop();
-    c.onClip = (clip) => onHeard(c, clip, endedAt);
-    c.rec?.stop();
+    // Your turn: from 0.4 s before your first word to now.
+    const from = (c.turnStart ?? c.since) - 400;
+    c.turnStart = undefined;
+    onHeard(c, toWav(c.pcm.filter((x) => x.t >= from).map((x) => x.d), c.ac.sampleRate), endedAt);
   }
 
   function interrupt(c: Call) {
@@ -741,7 +762,7 @@ export default function Stage() {
     const last = c.history[c.history.length - 1];
     if (last?.role === "bot") last.cut = Math.max(1, spokenRef.current);
     setVlines([...c.history]);
-    listen(c);
+    listen(c, (c.loudSince ?? performance.now()) - 200); // keep the words you said while cutting in
   }
 
   async function onHeard(c: Call, audio: Blob, endedAt: number) {

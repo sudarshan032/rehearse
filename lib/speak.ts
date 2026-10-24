@@ -171,17 +171,19 @@ const norm = (v: SpeechSynthesisVoice) => v.lang.replace("_", "-").toLowerCase()
 // Best-sounding first: downloaded Enhanced/Premium voices, then Google's online voices, then the rest.
 // The bots are written as women ("Priya"), so known female voices come first. ponytail: a name list, since
 // browsers don't say a voice's gender; add names when new voices show up.
-const FEMALE = /tara|veena|lekha|geeta|isha|kiyara|neerja|swara|shruti|samantha|karen|moira|tessa|google/i;
-const MALE = /rishi|aman|daniel|alex|fred|ravi|hemant|madhur|prabhat|mohan/i;
-const rank = (v: SpeechSynthesisVoice) =>
-  (/enhanced|premium|natural|neural/i.test(v.name) ? 4 : 0) + (/^google/i.test(v.name) ? 2 : 0) + Number(v.localService) + (FEMALE.test(v.name) ? 1.5 : 0) - (MALE.test(v.name) ? 2 : 0);
+const MALE = /\b(male|rishi|aman|daniel|alex|fred|ravi|hemant|madhur|prabhat|mohan|arthur|oliver)\b/i;
+const FEMALE = /\b(female|tara|veena|lekha|geeta|isha|kiyara|neerja|swara|shruti|samantha|karen|moira|tessa)\b|^google (?!.*\bmale\b)/i;
+// Gender first (a woman's voice beats an Indian man's voice for "Priya"), then Indian locale, then quality.
+const rank = (v: SpeechSynthesisVoice, lang?: SpeakLang) =>
+  (FEMALE.test(v.name) ? 6 : 0) - (MALE.test(v.name) ? 6 : 0) + (lang && norm(v) === lang.toLowerCase() ? 4 : 0) +
+  (/enhanced|premium|natural|neural/i.test(v.name) ? 3 : 0) + (/^google/i.test(v.name) ? 1 : 0) + (v.localService ? 0.5 : 0);
 const PREF = (lang: SpeakLang) => `rh-voice-${lang}`;
 
 /** The voices this browser has for a language, best first, and the one the user picked (if any). */
 export async function voicesFor(lang: SpeakLang) {
   if (typeof speechSynthesis === "undefined") return { list: [], picked: "" };
   const list = (await browserVoices()).filter((v) => norm(v).startsWith(lang.slice(0, 2).toLowerCase()))
-    .sort((a, b) => Number(norm(b) === lang.toLowerCase()) * 8 + rank(b) - Number(norm(a) === lang.toLowerCase()) * 8 - rank(a)) // Indian voices first
+    .sort((a, b) => rank(b, lang) - rank(a, lang))
     .map((v) => v.name);
   let picked = "";
   try {
@@ -202,13 +204,9 @@ function pickVoice(all: SpeechSynthesisVoice[], lang: SpeakLang) {
   } catch {}
   const mine = want && all.find((v) => v.name === want);
   if (mine) return mine;
-  const voices = [...all].sort((a, b) => rank(b) - rank(a));
-  const tries = [lang.toLowerCase(), lang.slice(0, 2), "en-in", "en"];
-  for (const t of tries) {
-    const v = voices.find((x) => norm(x) === t) ?? voices.find((x) => norm(x).startsWith(t));
-    if (v) return v;
-  }
-  return undefined;
+  // Same order as the picker shows, so what you hear is the first voice in the list.
+  const best = (pre: string, l: SpeakLang) => all.filter((x) => norm(x).startsWith(pre)).sort((a, b) => rank(b, l) - rank(a, l))[0];
+  return best(lang.slice(0, 2).toLowerCase(), lang) ?? best("en", "en-IN");
 }
 
 async function browserSay(text: string, lang: SpeakLang, t0: number, onWord?: (end: number) => void) {
