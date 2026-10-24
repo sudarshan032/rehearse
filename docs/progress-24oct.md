@@ -29,3 +29,9 @@ No money and no paid credits were used (only Groq's free tier).
 - Voice test was checked with a recorded file sent to Whisper and with the in-browser voice, but not with a real microphone (the test browser has none). Your first real try is the real check.
 - KittenTTS runs on the page's main thread: the page can pause about 1 s while it makes a sentence.
 - Groq's free limits: heavy testing can hit "busy"; the fallbacks usually cover it.
+
+## Later additions (same evening)
+- **Building screen** shows 5 steps ticking while the AI works; the questions screen shows what it understood (languages, never/always rules).
+- **"start a new bot"** works from any screen; very short lines on the first screen ask for more detail instead of building a bot from 2 words.
+- **Busy free AI**: the message is short now, your words stay in the box (press Enter to resend), and short rate-limit waits (≤ 4 s) are waited out before falling back. Groq's free limit is 8,000 tokens per minute per model, so very fast back-to-back edits can still hit it.
+- **Regression run (paced)**: new clinic reminder bot built from a brief + one spoken answer; a Hindi caller asked for medicine advice; the bot refused politely in Hindi and kept the rule.
