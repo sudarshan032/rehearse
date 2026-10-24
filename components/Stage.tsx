@@ -120,6 +120,26 @@ export default function Stage() {
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const media = useRef<MediaRecorder | null>(null);
   const queued = useRef(false);
+  const seen = useRef(new Set<string>()); // texts already put in the box
+  const clip = useRef<string | undefined>(undefined); // last clipboard text we know about
+  const lastInput = useRef(0); // time of the last real input or paste
+
+  const readClip = () => (navigator.clipboard?.readText ? navigator.clipboard.readText().catch(() => undefined) : Promise.resolve(undefined));
+
+  // Put dictated text into the box and send it after a short countdown.
+  function insert(t: string, how: string) {
+    const el = inp.current;
+    if (!el) return;
+    const v = (el.value.trim() ? el.value.trimEnd() + " " : "") + t.trim();
+    el.value = v;
+    el.focus({ preventScroll: true });
+    lastInput.current = Date.now();
+    setText(v);
+    log("insert", { how, len: v.length });
+    clearTimeout(timer.current);
+    setCounting(true);
+    timer.current = setTimeout(() => handleRef.current(v), 700);
+  }
   const bot = draft?.bot;
 
   // Restore the bot that was open before a reload.
@@ -143,16 +163,17 @@ export default function Stage() {
         if (a !== inp.current && !(a instanceof HTMLInputElement) && !String(getSelection())) inp.current?.focus({ preventScroll: true });
       }, 0);
     // A paste that lands anywhere on the page goes into the box.
+    // Every paste is inserted by us, wherever it lands. Some pastes (Wispr's quick Cmd+V) fire the
+    // paste event but the browser never inserts the text, so we never rely on the browser for it.
     const onPaste = (e: ClipboardEvent) => {
       const el = inp.current;
-      log("paste", { target: (e.target as HTMLElement)?.tagName, inBox: e.target === el, len: e.clipboardData?.getData("text").length });
-      if (!el || e.target === el) return;
-      const t = e.clipboardData?.getData("text");
-      if (!t) return;
+      const t = e.clipboardData?.getData("text") ?? "";
+      log("paste", { target: (e.target as HTMLElement)?.tagName, inBox: e.target === el, len: t.length });
+      if (!el || !t.trim()) return;
       e.preventDefault();
-      el.focus();
-      el.value = (el.value ? el.value + " " : "") + t;
-      el.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertFromPaste" }));
+      if (el.value.includes(t.trim())) return; // already put in from the clipboard
+      seen.current.add(t.trim());
+      insert(t, "paste");
     };
     // Typing anywhere goes into the box too.
     const onKeyDown = (e: KeyboardEvent) => {
@@ -161,11 +182,33 @@ export default function Stage() {
       if (e.key.length === 1 && !(document.activeElement instanceof HTMLInputElement)) inp.current?.focus({ preventScroll: true });
     };
     const onBlur = () => log("blur", { to: document.activeElement?.tagName });
-    const onWinBlur = () => log("window-blur", { active: document.activeElement?.tagName });
-    const onWinFocus = () => {
-      log("window-focus", { active: document.activeElement?.tagName });
-      refocus();
+    // Wispr's hands-free shortcut takes the window focus away while you talk. When the focus comes back,
+    // its Cmd+V can arrive before the page is ready and get lost. The words are still on the clipboard
+    // at that moment, so read them from there if nothing was pasted.
+    let blurAt = 0;
+    const onWinBlur = () => {
+      blurAt = Date.now();
+      log("window-blur", { active: document.activeElement?.tagName });
     };
+    const onWinFocus = () => {
+      const away = Date.now() - blurAt;
+      log("window-focus", { active: document.activeElement?.tagName, away });
+      refocus();
+      const before = lastInput.current;
+      setTimeout(() => {
+        if (lastInput.current !== before) return; // a real paste arrived
+        readClip().then((t) => {
+          const clean = t?.trim();
+          if (!clean || seen.current.has(clean) || clean === clip.current) return void (clip.current = clean ?? clip.current);
+          clip.current = clean;
+          if (away > 120_000) return; // long absence: probably copied something else
+          log("clipboard-rescue", { len: clean.length, away });
+          seen.current.add(clean);
+          insert(clean, "clipboard");
+        });
+      }, 450);
+    };
+    readClip().then((t) => (clip.current = t?.trim()));
     const el = inp.current;
     document.addEventListener("mouseup", refocus);
     document.addEventListener("paste", onPaste, true);
@@ -272,7 +315,7 @@ export default function Stage() {
     setChanged({ ...r.changed, summary: r.summary });
     say(t, r.summary);
     const wasTurn = sel?.kind === "turn";
-    setSel(null);
+    if (wasTurn) setSel(null); // a pointed step, rule or fact stays selected for more changes
     if (wasTurn || scene === "call") {
       const last = [...lines].reverse().find((l) => l.role === "bot");
       const rule = last?.broken?.[0] && r.bot.rules.findIndex((x) => x.id === last.broken![0].rule_id);
@@ -401,6 +444,10 @@ export default function Stage() {
   }
 
   // ---------- the one input ----------
+  const handleRef = useRef<(t: string) => void>(() => {});
+  useEffect(() => {
+    handleRef.current = handle;
+  });
   async function handle(raw: string) {
     const t = raw.trim();
     clearTimeout(timer.current);
@@ -417,6 +464,7 @@ export default function Stage() {
     const low = t.toLowerCase().replace(/[.!?,]+$/g, "").trim();
     const words = low.split(/\s+/).length;
 
+    if (/^(clear|deselect|unselect|cancel)( (it|that|this|the selection|selection))?$/.test(low)) return setSel(null), say(t, "Cleared");
     if (NEXT.test(low)) return step(t, 1);
     if (PREV.test(low)) return back(), say(t, "Back");
     if (words <= 7 && (GO.test(low) || words <= 2)) {
@@ -441,6 +489,8 @@ export default function Stage() {
     if (scene === "questions" && moreRe.test(t)) return askMore(t);
 
     if (scene === "describe" || scene === "bots") return brief(t);
+    if (scene === "questions" && /^(rehears|call it|test it|try it|show|open|go to|take me)/.test(low))
+      return say(t, "Answer the questions first, or say “just build it”.", { err: true });
     if (scene === "questions") return build(t, g?.intent === "build_now" ? "" : t);
     if (!bot) return brief(t);
     if ((scene === "call" || scene === "fix") && g?.intent === "caller_turn" && !pointing) {
@@ -541,7 +591,7 @@ export default function Stage() {
         setText(el.value);
         setCounting(true);
         clearTimeout(timer.current);
-        timer.current = setTimeout(() => handle(el.value), 700);
+        timer.current = setTimeout(() => handleRef.current(el.value), 700);
       }
     }, 300);
     return () => clearInterval(id);
@@ -553,11 +603,12 @@ export default function Stage() {
     const ie = e.nativeEvent as InputEvent;
     const jump = v.length - text.length;
     log("input", { type: ie.inputType, len: v.length, jump, scene });
+    lastInput.current = Date.now();
     setText(v);
     clearTimeout(timer.current);
     if (ie.inputType === "insertFromPaste" || ie.inputType === "insertReplacementText" || jump > 1) {
       setCounting(true);
-      timer.current = setTimeout(() => handle(v), 700);
+      timer.current = setTimeout(() => handleRef.current(v), 700);
     } else setCounting(false);
   }
   function onKey(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -570,12 +621,13 @@ export default function Stage() {
         setCounting(false);
       } else if (sel) setSel(null);
       else if (!text) back();
-    }
+    } else if (e.key === "Backspace" && !text && sel) setSel(null);
   }
 
   function pickStep(id: string) {
     if (!bot) return;
     const i = bot.flow.steps.findIndex((s) => s.id === id);
+    if (sel?.id === id) return setSel(null);
     setSel({ kind: "step", id, label: `Change → step ${i + 1} · ${bot.flow.steps[i].label}` });
   }
 
@@ -621,6 +673,9 @@ export default function Stage() {
           return (
             <button key={j.s} className={`${j.sub ? "sub" : ""} ${here ? "here" : ""}`} disabled={!ok} onClick={() => goTo("", j.s)}>
               <i />{j.name}
+              {bot && j.s === "rules" && <small>{bot.rules.length}</small>}
+              {bot && j.s === "knowledge" && <small>{bot.knowledge.length}</small>}
+              {bot && j.s === "blueprint" && <small>{bot.flow.steps.length} steps</small>}
             </button>
           );
         })}
@@ -665,16 +720,6 @@ export default function Stage() {
               <div className="eyebrow">{bot.name} · v{bot.version} · {bot.languages.map(langName).join(" · ")} · click a step, then say the change</div>
               <div className="flowbig" key={`${bot.id}-${scene}`}>
                 <Flow bot={bot} chg={changed?.steps} sel={sel?.kind === "step" ? sel.id : undefined} onPick={pickStep} />
-              </div>
-              <div className="tiles">
-                {([["rules", `${bot.rules.length}`, "Rules", `${bot.rules.filter((r) => r.kind === "never").length} never · ${bot.rules.filter((r) => r.kind === "always").length} always`],
-                  ["knowledge", `${bot.knowledge.length}`, "Facts", "what it may say"],
-                  ["prompt", `${Math.round(bot.prompt.length / 100) / 10}k`, "Prompt", "characters, built for you"],
-                  ["stack", "3", "Stack", "Deepgram · Groq · Murf"]] as const).map(([s, big, name, note], i) => (
-                  <button key={s} className="tile" style={{ ["--d" as string]: `${0.5 + i * 0.07}s` }} onClick={() => go(s)}>
-                    <small>say “show {name.toLowerCase()}”</small><b>{big} {name}</b><span>{note}</span>
-                  </button>
-                ))}
               </div>
               <div className="chg">{changed && <span>{changed.summary}</span>}</div>
             </>
@@ -848,7 +893,7 @@ export default function Stage() {
         </div>
         <div className="pill">
           <span className={`tgt ${sel?.kind === "turn" ? "bad" : sel ? "chg" : scene === "call" ? "call" : ""}`} onClick={() => setSel(null)} title="Esc to clear">
-            {sel ? <><I d={IC.target} /><span>{sel.label}</span></> : scene === "call" ? <><I d={IC.target} /><span>Caller</span></> : null}
+            {sel ? <><I d={IC.target} /><span>{sel.label}</span><I d={IC.x} /></> : scene === "call" ? <><I d={IC.target} /><span>Caller</span></> : null}
           </span>
           <textarea ref={inp} id="inp" rows={1} value={text} onInput={onInput} onChange={() => {}} onKeyDown={onKey}
             placeholder={busy ? `${busy}…` : PLACEHOLDER[scene] ?? "Say what to do…"} aria-label="Talk or type to Rehearse" autoFocus />

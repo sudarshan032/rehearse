@@ -1,9 +1,10 @@
-@import "tailwindcss";
 
 :root{--bg:#f4f1ea;--panel:#fffcf6;--ink:#1b1a17;--muted:#6c675d;--line:#e1dccf;--accent:#1f6f5c;--on-accent:#fff;--accent-soft:#dcefe8;--bad:#b91c1c;--bad-soft:#fde2e2;--warn:#b45309;--warn-soft:#fcecd2;--chip:#ece8de;--sh:0 1px 2px rgba(40,32,16,.06),0 14px 34px -10px rgba(40,32,16,.22);--s1:#8b8473;--s2:#0e7490;--s3:#1f6f5c;--s4:#7c3aed;
 --display:var(--font-display),system-ui,sans-serif;--body:var(--font-body),var(--font-telugu),var(--font-deva),system-ui,sans-serif;--mono:var(--font-mono),ui-monospace,monospace}
 :root[data-theme=dark]{--bg:#121411;--panel:#1a1d19;--ink:#e9ebe4;--muted:#9aa196;--line:#2c312b;--accent:#5fc9ab;--on-accent:#0b1a14;--accent-soft:#1d3029;--bad:#f87171;--bad-soft:#3a1c1c;--warn:#f5a524;--warn-soft:#3a2a10;--chip:#242823;--sh:0 1px 2px rgba(0,0,0,.4),0 16px 38px -12px rgba(0,0,0,.7);--s1:#7d786c;--s2:#22a3c4;--s3:#3fae8f;--s4:#9b6cf6}
 *{box-sizing:border-box}
+h1,h2,h3,p,ol,ul,dl,dd,figure{margin:0}
+textarea{font:inherit}
 html,body{height:100%}
 body{margin:0;color:var(--ink);font:15px/1.5 var(--body);overflow:hidden;-webkit-font-smoothing:antialiased;background:var(--bg) radial-gradient(ellipse 70% 55% at 50% 38%,var(--panel),transparent 72%) no-repeat}
 button{font:inherit;color:inherit;cursor:pointer;background:none;border:0;padding:0}
@@ -165,3 +166,14 @@ body.listening .tries{opacity:0}
 .journey .jh{font-size:12px;color:var(--muted);margin:12px 10px 0;line-height:1.45}
 @media (min-width:1100px){main{left:200px}}
 @media (max-width:1099px){.journey{display:none}}
+.cap{flex-wrap:wrap;row-gap:4px;text-align:center}
+.cap b.ans{flex-basis:100%;font-weight:600;color:var(--ink);max-width:640px;margin:0 auto}
+.cap q{max-width:520px}
+.tgt{cursor:pointer}
+.flowbig{max-height:52vh;overflow:auto}
+.flowbig svg{max-height:52vh}
+.flowbig{width:min(1240px,100%);max-height:62vh}
+.flowbig svg{max-height:62vh;min-width:0}
+.n .t{font-size:15px} .el{font-size:12px}
+.journey button small{margin-left:auto;font:500 11px var(--mono);color:var(--muted)}
+.cap b.ans{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}

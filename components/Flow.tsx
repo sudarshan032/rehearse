@@ -1,7 +1,7 @@
 "use client";
 import type { Bot } from "@/lib/bot";
 
-const W = 168, H = 56, GX = 64, GY = 30, PAD = 24;
+const W = 172, H = 58, GX = 100, GY = 40, PAD = 24;
 
 // Layered layout: column = distance from the start step, row = order within that column.
 // ponytail: no crossing reduction; fine for the 5-10 steps a bot has, use dagre if flows grow.
@@ -30,7 +30,7 @@ function layout(bot: Bot) {
       pos.set(id, { x: PAD + d * (W + GX), y: PAD + 16 + off + r * (H + GY) });
     }),
   );
-  return { pos, w: PAD * 2 + cols.length * (W + GX) - GX, h: PAD * 2 + 32 + tall * (H + GY) - GY };
+  return { pos, w: PAD * 2 + cols.length * (W + GX) - GX };
 }
 
 type Props = {
@@ -46,14 +46,21 @@ type Props = {
 };
 
 export function Flow({ bot, lit = [], cur, bad, good, chg = [], sel, mini, onPick }: Props) {
-  const { pos, w, h } = layout(bot);
+  const { pos, w } = layout(bot);
+  const bottom = Math.max(...[...pos.values()].map((p) => p.y + H));
+  const backIdx = new Map<number, number>();
+  bot.flow.links.forEach((l, i) => {
+    const a = pos.get(l.from), b = pos.get(l.to);
+    if (a && b && b.x <= a.x) backIdx.set(i, backIdx.size);
+  });
+  const h = bottom + (backIdx.size ? 30 + backIdx.size * 20 : 0) + PAD;
   const num = new Map(bot.flow.steps.map((s, i) => [s.id, i + 1]));
   const litEdge = (a: string, b: string) => {
     const i = lit.indexOf(a);
     return i >= 0 && lit[i + 1] === b;
   };
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} role="img" aria-label="Call flow" style={mini ? { maxHeight: 190 } : undefined}>
+    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="xMidYMin meet" role="img" aria-label="Call flow" style={mini ? { maxHeight: 190 } : undefined}>
       <defs>
         <marker id="mk" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
           <path d="M0 0L10 5L0 10z" fill="var(--line)" />
@@ -66,17 +73,27 @@ export function Flow({ bot, lit = [], cur, bad, good, chg = [], sel, mini, onPic
         const a = pos.get(l.from), b = pos.get(l.to);
         if (!a || !b) return null;
         const back = b.x <= a.x;
-        const d = back
-          ? `M${a.x + W / 2} ${a.y + H} C${a.x + W / 2} ${a.y + H + 60} ${b.x + W / 2} ${b.y + H + 60} ${b.x + W / 2} ${b.y + H + 4}`
-          : `M${a.x + W} ${a.y + H / 2} C${a.x + W + GX / 2} ${a.y + H / 2} ${b.x - GX / 2} ${b.y + H / 2} ${b.x - 4} ${b.y + H / 2}`;
-        const mx = back ? (a.x + b.x) / 2 + W / 2 : (a.x + W + b.x) / 2;
-        const my = back ? Math.max(a.y, b.y) + H + 44 : (a.y + b.y) / 2 + H / 2 - 6;
+        let d: string, mx: number, my: number;
+        if (back) {
+          // Loops and backward links run in their own lane under the whole flow, so they never cross a box.
+          const lane = bottom + 22 + backIdx.get(i)! * 20;
+          d = `M${a.x + W / 2} ${a.y + H} V${lane} H${b.x + W / 2 + 14} V${b.y + H + 6}`;
+          mx = (a.x + b.x + W) / 2 + 7;
+          my = lane - 5;
+        } else {
+          d = `M${a.x + W} ${a.y + H / 2} C${a.x + W + GX / 2} ${a.y + H / 2} ${b.x - GX / 2} ${b.y + H / 2} ${b.x - 4} ${b.y + H / 2}`;
+          // Label near the start of the link, so labels of links that cross never sit on top of each other.
+          mx = a.x + W + GX * 0.34;
+          my = a.y + H / 2 + (b.y - a.y) * 0.22 - 7;
+        }
+        const tag = l.when.length > 15 ? l.when.slice(0, 14) + "…" : l.when;
         return (
           <g key={i}>
             <path d={d} className={`e ${litEdge(l.from, l.to) ? "lit" : ""}`} style={{ ["--d" as string]: `${0.15 + i * 0.06}s` }} />
             {!mini && l.when !== "always" && (
               <text x={mx} y={my} className="el" style={{ ["--d" as string]: `${0.3 + i * 0.06}s` }}>
-                {l.when.slice(0, 22)}
+                <title>{l.when}</title>
+                {tag}
               </text>
             )}
           </g>
