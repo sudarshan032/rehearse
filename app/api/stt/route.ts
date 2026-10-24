@@ -44,6 +44,11 @@ async function groq(key: string, audio: ArrayBuffer, type: string, langs: string
   form.append("response_format", "verbose_json");
   // Only pin the language when the bot speaks just one. Mixed bots let Whisper detect it.
   if (langs.length === 1) form.append("language", langs[0]);
+  // A short code-mixed example keeps each word in its own script (English words stay English) and stops
+  // Whisper from translating the caller into another language.
+  const sample = [langs.includes("te") && "నా free plan లో limit అయిపోయింది.", langs.includes("hi") && "मुझे refund चाहिए, please.", "Is the Pro trial really free?"].filter(Boolean).join(" ");
+  form.append("prompt", sample);
+  form.append("temperature", "0");
   const res = await fetch(GROQ_URL, {
     method: "POST",
     // Groq's Cloudflare blocks default user agents.

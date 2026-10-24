@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { langName, TOOL_SHELF, type Bot, type Interview } from "@/lib/bot";
 import { guessIntent, personaOf, type Stage as SayStage, type Tab } from "@/lib/say";
-import { getDraft, listDrafts, newId, post, saveDraft, type Draft } from "@/lib/store";
+import { getDraft, listDrafts, newId, post, saveDraft, type Change, type Draft } from "@/lib/store";
 import { EXPORTS } from "@/lib/export";
 import { SAMPLE_BOT, SAMPLE_BRIEF, SAMPLE_CALL, SAMPLE_ID } from "@/lib/sample";
 import { pickVoiceName, preloadVoice, speak, stopSpeaking, voicesFor, type SpeakLang } from "@/lib/speak";
@@ -21,6 +21,9 @@ type Call = {
   phase: "listening" | "thinking" | "speaking"; since: number; lang: string;
   rec?: MediaRecorder; sr?: InstanceType<SRClass>; onClip?: (b: Blob) => void;
 };
+const srClass = () =>
+  typeof window === "undefined" ? undefined
+    : ((window as unknown as { SpeechRecognition?: SRClass }).SpeechRecognition ?? (window as unknown as { webkitSpeechRecognition?: SRClass }).webkitSpeechRecognition);
 const srLang = (l: string) => (l === "te" ? "te-IN" : l === "hi" ? "hi-IN" : "en-IN");
 type Target = { kind: "step" | "rule" | "knowledge" | "prompt" | "turn"; id?: string; text?: string; label: string };
 type EditResult = { bot: Bot; summary: string; changed: { steps: string[]; rules: string[]; knowledge: string[] }; applied: number };
@@ -70,7 +73,7 @@ const JOURNEY: { s: Scene; name: string; sub?: boolean; re: RegExp }[] = [
   { s: "prompt", name: "Prompt", sub: true, re: /\bprompt\b/ },
   { s: "stack", name: "Stack & speed", sub: true, re: /\b(stack|speed)\b/ },
   { s: "call", name: "Rehearse", re: /\b(rehears\w*|call|practice)\b/ },
-  { s: "fix", name: "Fix", re: /\bfix(es)?\b/ },
+  { s: "fix", name: "Changes", re: /\b(fix(es)?|changes|history|versions?)\b/ },
   { s: "voice", name: "Voice test", re: /\bvoice( test)?\b/ },
   { s: "export", name: "Export", re: /\b(export|download)\b/ },
   { s: "bots", name: "My bots", re: /\b(my bots|all bots|bots)\b/ },
@@ -243,11 +246,23 @@ export default function Stage() {
     return () => clearInterval(t);
   }, [scene]);
 
-  // The conversation keeps the newest words in view.
+  // "Just changed" highlights last until you move to another screen (the edit's own jump does not count).
+  const keepChanged = useRef(false);
+  useEffect(() => {
+    if (keepChanged.current) keepChanged.current = false;
+    else setChanged(null);
+  }, [scene]);
+
+  // Both transcripts keep the newest words in view; scroll up any time to read back.
   useEffect(() => {
     const el = convoEl.current;
     if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [vlines, interim, spoken]);
+  const subsEl = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = subsEl.current;
+    if (el) setTimeout(() => el.scrollTo({ top: el.scrollHeight, behavior: "smooth" }), 50);
+  }, [lines]);
 
   // Leaving the Voice test hangs up the call.
   useEffect(() => {
@@ -419,7 +434,12 @@ export default function Stage() {
     if (!draft?.bot) return;
     if (!r.applied) return say(t, r.summary, { ans: true });
     setUndo((u) => [...u.slice(-20), draft.bot!]);
-    store({ ...draft, bot: r.bot });
+    const lastBotLine = [...lines].reverse().find((l) => l.role === "bot");
+    const onTurn = sel?.kind === "turn" || scene === "call";
+    const brokeRule = onTurn && lastBotLine?.broken?.[0] ? `Rule ${r.bot.rules.findIndex((x) => x.id === lastBotLine.broken![0].rule_id) + 1}` : undefined;
+    const entry: Change = { v: r.bot.version, summary: r.summary, ...(onTurn ? { before: lastBotLine?.text, step: lastBotLine?.step_id, rule: brokeRule } : {}) };
+    store({ ...draft, bot: r.bot, log: [...(draft.log ?? []), entry].slice(-30) });
+    keepChanged.current = true;
     setChanged({ ...r.changed, summary: r.summary });
     say(t, r.summary);
     const wasTurn = sel?.kind === "turn";
@@ -441,8 +461,9 @@ export default function Stage() {
     const prev = undo[undo.length - 1];
     if (!prev || !draft) return say(t, "Nothing to undo");
     setUndo(undo.slice(0, -1));
-    store({ ...draft, bot: prev });
+    store({ ...draft, bot: prev, log: draft.log?.slice(0, -1) });
     setChanged(null);
+    setFix(null);
     say(t, `Undone. Back to v${prev.version}.`);
   }
 
@@ -553,7 +574,7 @@ export default function Stage() {
   // ponytail: energy-based turn taking (pause of 750 ms ends your turn); swap in a VAD model if rooms are noisy.
   function watch(c: Call) {
     const buf = new Float32Array(c.an.fftSize);
-    let floor = 0.006, voiced = 0, lastVoice = 0, prev = performance.now(), echo = 0, phase = c.phase;
+    let floor = 0.006, voiced = 0, lastVoice = 0, prev = performance.now(), echo = 0, phase = c.phase, lastLog = 0;
     const tick = () => {
       if (call.current !== c) return;
       c.an.getFloatTimeDomainData(buf);
@@ -571,12 +592,17 @@ export default function Stage() {
         } else if (!voiced && now - c.since > 15000) restartRec(c); // long silence: keep the clip small
       } else if (c.phase === "speaking" && bargeRef.current) {
         // The bot's own voice comes back through the mic; only a voice clearly louder than that counts as you.
-        if (now - c.since < 350 || rms < Math.max(0.05, echo * 2.2, floor * 5)) {
+        if (now - c.since < 350 || rms < Math.max(0.04, echo * 1.6, floor * 4)) {
           echo = Math.max(echo * 0.995, rms);
           voiced = Math.max(0, voiced - dt);
-        } else if ((voiced += dt) > 300) {
+        } else if ((voiced += dt) > 250) {
+          log("call-barge", { by: "loudness", rms: +rms.toFixed(3), echo: +echo.toFixed(3) });
           interrupt(c);
           lastVoice = now;
+        }
+        if (now - lastLog > 500) {
+          lastLog = now;
+          log("call-level", { rms: +rms.toFixed(3), echo: +echo.toFixed(3), floor: +floor.toFixed(4) });
         }
       } else voiced = 0;
       raf.current = requestAnimationFrame(tick);
@@ -597,8 +623,7 @@ export default function Stage() {
     c.rec = rec;
     rec.start();
     // Live words while you talk, from the browser's own speech recognition (free). Whisper still makes the final text.
-    const SR = (window as unknown as { SpeechRecognition?: SRClass; webkitSpeechRecognition?: SRClass }).SpeechRecognition
-      ?? (window as unknown as { webkitSpeechRecognition?: SRClass }).webkitSpeechRecognition;
+    const SR = srClass();
     if (SR) {
       const sr = new SR();
       sr.lang = c.lang;
@@ -611,6 +636,33 @@ export default function Stage() {
         c.sr = sr;
       } catch {}
     }
+  }
+
+  // Barge-in by words: while the bot talks, the browser's recogniser also listens. Hearing the bot's own words
+  // (its echo from the speakers) is normal; hearing two or more words the bot is not saying means you cut in.
+  // This works even when loudness alone can't tell you from the echo (no headphones).
+  function listenForCutIn(c: Call, said: string, lang: string) {
+    const SR = srClass();
+    if (!SR || !bargeRef.current) return;
+    const mine = new Set(said.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []);
+    const sr = new SR();
+    sr.lang = lang;
+    sr.interimResults = true;
+    sr.continuous = true;
+    sr.onresult = (e) => {
+      const heard = Array.from(e.results, (r) => r[0].transcript).join(" ").toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+      const fresh = heard.filter((w) => !mine.has(w));
+      if (fresh.length >= 2 && c.phase === "speaking" && call.current === c) {
+        log("call-barge", { by: "words", heard: heard.join(" ") });
+        sr.abort();
+        interrupt(c);
+      }
+    };
+    sr.onerror = () => {};
+    try {
+      sr.start();
+      c.sr = sr;
+    } catch {}
   }
 
   function restartRec(c: Call) {
@@ -629,6 +681,7 @@ export default function Stage() {
 
   function interrupt(c: Call) {
     stopSpeaking();
+    c.sr?.abort();
     // Keep only what the bot really said before you cut in.
     const last = c.history[c.history.length - 1];
     if (last?.role === "bot") last.cut = Math.max(1, spokenRef.current);
@@ -644,6 +697,7 @@ export default function Stage() {
       const stt = await res.json();
       if (!res.ok) throw new Error(stt.error ?? "Could not hear that");
       if (call.current !== c) return;
+      log("call-heard", { text: stt.text, lang: stt.lang, ms: stt.ms, bytes: audio.size });
       if (!stt.text?.trim()) return listen(c);
       const t1 = performance.now();
       c.lang = srLang(langOf(stt.text).toLowerCase());
@@ -679,7 +733,9 @@ export default function Stage() {
         setSpoken(n);
       });
       if (t) setTiming({ hear: t[1] - t[0], think: t[2] - t[1], speak: sp.firstSoundMs, total: t[2] - t[0] + sp.firstSoundMs, left: sp.engine });
+      listenForCutIn(c, text, ttsLang(text, bot));
       await sp.done;
+      if (c.phase === "speaking") c.sr?.abort();
       if (c.phase === "speaking") await new Promise((r) => setTimeout(r, 200)); // let the room go quiet
     } catch (e) {
       say("", (e as Error).message || "Voice is off. The reply is shown as text.", { err: true });
@@ -806,16 +862,15 @@ export default function Stage() {
     if (s === "questions" && !draft?.interview) return say(t, "No questions yet. Describe a bot first.", { err: true });
     if (s === "bots") return go("bots"), say(t, "My bots");
     if (s !== "questions" && !bot) return say(t, "Build the bot first", { err: true });
-    if (s === "fix" && !fix) return say(t, "Nothing fixed yet. Rehearse first.", { err: true });
     if (s === "call") return lines.length ? (go("call"), say(t, "Back to the call")) : startCall(t);
     go(s);
     say(t, `Showing ${JOURNEY.find((j) => j.s === s)?.name}`);
   }
   function step(t: string, dir: 1 | -1) {
     // Same order as the panel: Flow → Rules → Facts → Prompt → Stack → Rehearse → (Fix) → Voice test → Export.
-    const order = JOURNEY.map((j) => j.s).filter((s) => s !== "bots" && (s !== "fix" || !!fix));
+    const order: string[] = JOURNEY.map((j) => j.s).filter((s) => s !== "bots");
     const here = Math.max(0, order.indexOf(scene === "building" ? "questions" : scene));
-    const to = order[Math.min(order.length - 1, Math.max(0, here + dir))];
+    const to = order[Math.min(order.length - 1, Math.max(0, here + dir))] as Scene;
     if (to === scene) return say(t, "This is the last step");
     if (scene === "questions" && dir === 1) return build(t, "");
     goTo(t, to);
@@ -825,13 +880,9 @@ export default function Stage() {
     if (tab === "back") return back(), say(t, "Back");
     if (tab === "sample") return openSample(t);
     if (tab === "home") {
-      setDraft(null);
-      setLines([]);
-      try {
-        sessionStorage.removeItem("rehearse:open");
-      } catch {}
+      // The open bot stays open (and in My bots); describing something new starts a new bot.
       go("describe");
-      return say(t, "New bot");
+      return say(t, bot ? `Describe a new bot. ${bot.name} is still open: say “back to the flow”.` : "New bot");
     }
     const s = TAB_SCENE[tab];
     if (!s) return;
@@ -847,8 +898,8 @@ export default function Stage() {
   }
 
   // The saved rehearsal: plays line by line, no AI needed, ends on a broken rule.
-  function playSample(t: string) {
-    if (!bot) return;
+  function playSample(t: string, b: Bot | undefined = bot) {
+    if (!b) return;
     setPersona("Telugu caller, asks about refunds");
     setLines([]);
     setFix(null);
@@ -865,7 +916,7 @@ export default function Stage() {
           setBox("@Last reply ");
           say(t, "Broke rule 1. Say the fix, e.g. “if they ask for a refund, say the trial is free and offer a manager callback”.");
         }
-      }, 700 + i * 1100),
+      }, 600 + i * 1700), // slow enough to read each line
     );
   }
 
@@ -980,7 +1031,7 @@ export default function Stage() {
   const lastBot = [...lines].reverse().find((l) => l.role === "bot");
   const badStep = lastBot?.broken?.length ? lastBot.step_id : undefined;
   const progIdx = PROGRESS.findIndex(([, s]) => s === (scene === "building" ? "questions" : ["rules", "knowledge", "prompt", "stack"].includes(scene) ? "blueprint" : scene));
-  const reach = (s: Scene) => s === "describe" || (s === "questions" ? !!draft?.interview : !!bot && (s !== "fix" || !!fix));
+  const reach = (s: Scene) => s === "describe" || (s === "questions" ? !!draft?.interview : !!bot);
   const u = draft?.interview?.understood;
   const hints = scene === "voice" && live !== "off" ? ["end the call", barge ? "turn off interruptions" : "let me interrupt"] : scene === "call" && sel ? ["if they ask for a refund, offer a manager callback instead", "replay", "stop the call"] : HINTS[scene];
 
@@ -1012,7 +1063,7 @@ export default function Stage() {
         <div className="jt">Running order<button onClick={() => setPanel(!panel)} aria-label={panel ? "Hide the path" : "Show the path"}>{panel ? "‹" : "›"}</button></div>
         {JOURNEY.map((j) => {
           const here = scene === j.s || (scene === "building" && j.s === "questions");
-          const ok = j.s === "describe" || j.s === "bots" || (j.s === "questions" ? !!draft?.interview : !!bot && (j.s !== "fix" || !!fix));
+          const ok = j.s === "describe" || j.s === "bots" || (j.s === "questions" ? !!draft?.interview : !!bot);
           return (
             <button key={j.s} className={`${j.sub ? "sub" : ""} ${here ? "here" : ""}`} disabled={!ok} onClick={() => goTo("", j.s)}>
               <i />{j.name}
@@ -1029,13 +1080,22 @@ export default function Stage() {
         <section className={`scene hero ${scene === "describe" ? "on" : ""}`}>
           <div className="herogrid">
             <div className="herotext">
+              {bot && (
+                <button className="resume" onClick={() => goTo("", "blueprint")}>
+                  <small>Open now</small>{bot.name} · v{bot.version} <span>Back to it →</span>
+                </button>
+              )}
               <div className="eyebrow">A rehearsal room for voice bots</div>
               <h1 className="h1s">Talk your voice bot <em>into shape.</em></h1>
               <p className="sub0">Say what the bot should do, in English, हिंदी, తెలుగు or a mix. Then rehearse a call, catch the line that breaks a rule, and fix it by saying so.</p>
               <div className="ctas">
                 <button className="btn" onClick={() => {
-                  openSample("show me the sample");
-                  setTimeout(() => handleRef.current("play the sample call"), 1200);
+                  // Straight to the call (no stop at the flow first), so nothing jumps on screen.
+                  const d = getDraft(SAMPLE_ID) ?? { id: SAMPLE_ID, brief: SAMPLE_BRIEF, answers: [], bot: SAMPLE_BOT, updated: 0 };
+                  store(d);
+                  setUndo([]);
+                  setChanged(null);
+                  playSample("watch a bot break a rule", d.bot);
                 }}>Watch a bot break a rule</button>
                 <span>or just start talking below</span>
               </div>
@@ -1169,12 +1229,12 @@ export default function Stage() {
           )}
         </section>
 
-        <section className={`scene ${scene === "call" ? "on" : ""}`}>
+        <section className={`scene callscene ${scene === "call" ? "on" : ""}`}>
           {bot && (
             <>
               <span className="persona"><I d={IC.target} />You are the caller{persona ? ` · ${persona}` : ""} · {talk ? "bot speaks out loud · say “mute”" : "say “speak the replies” to hear the bot"}</span>
               <div className="minimap"><Flow bot={bot} mini lit={path} cur={lastBot?.step_id} bad={badStep} good={lastBot?.fixed ? lastBot.step_id : undefined} /></div>
-              <div className="subs">
+              <div className="subs" ref={subsEl}>
                 {lines.map((l, i) => (
                   <div key={i} className={`sub ${l.role === "caller" ? "me" : ""} ${l.broken?.length ? "bad" : ""}`}>
                     <small>{l.role === "caller" ? "You · caller" : `Bot · step ${stepNo(l.step_id)}`}</small>
@@ -1191,24 +1251,43 @@ export default function Stage() {
           )}
         </section>
 
-        <section className={`scene ${scene === "fix" ? "on" : ""}`}>
-          {fix && (
+        <section className={`scene changes ${scene === "fix" ? "on" : ""}`}>
+          {bot && (
             <>
-              <div className="eyebrow">Point and speak · changed by voice</div>
-              <h2>Fixed where it broke</h2>
-              <div className="fixcard">
-                <div className="fxn">
-                  <span className="nb">{stepNo(fix.step) || "•"}</span>
-                  <b>{bot?.flow.steps.find((s) => s.id === fix.step)?.label ?? "Reply"}</b>
-                  {fix.rule && <span className="rchip">{fix.rule}</span>}
+              <div className="eyebrow">{bot.name} · now v{bot.version}</div>
+              <h2>{fix ? "Fixed where it broke" : "Changes"}</h2>
+              {fix && (
+                <div className="fixcard">
+                  <div className="fxn">
+                    <span className="nb">{stepNo(fix.step) || "•"}</span>
+                    <b>{bot.flow.steps.find((s) => s.id === fix.step)?.label ?? "Reply"}</b>
+                    {fix.rule && <span className="rchip">{fix.rule}</span>}
+                  </div>
+                  <div className="fxr was"><small>Before</small><div><p><s>{fix.before}</s></p></div></div>
+                  <div className="fxr now"><small>Now</small><div><p>{fix.summary}</p></div></div>
+                  <div className="fxbtns">
+                    <button className="btn" onClick={() => handle("replay")}>Replay the same line</button>
+                    <button className="btn ghost" onClick={() => handle("undo")}>Undo this fix</button>
+                  </div>
                 </div>
-                <div className="fxr was"><small>Before</small><div><p><s>{fix.before}</s></p></div></div>
-                <div className="fxr now"><small>Now</small><div><p>{fix.summary}</p></div></div>
-                <div className="fxbtns">
-                  <button className="btn" onClick={() => handle("replay")}>Replay the same line</button>
-                  <button className="btn ghost" onClick={() => handle("undo")}>Undo this fix</button>
-                </div>
-              </div>
+              )}
+              {draft?.log?.length ? (
+                <ol className="vlog">
+                  {[...draft.log].reverse().map((c, i) => (
+                    <li key={c.v + "-" + i}>
+                      <b>v{c.v}</b>
+                      <div>
+                        <p>{c.summary}</p>
+                        {c.before && <small>Fixed a reply{c.rule ? ` that broke ${c.rule.toLowerCase()}` : ""}: <s>{c.before}</s></small>}
+                      </div>
+                      {i === 0 && <button className="btn ghost" onClick={() => handle("undo")}>Undo</button>}
+                    </li>
+                  ))}
+                  <li><b>v1</b><div><p>Built from your description.</p></div></li>
+                </ol>
+              ) : (
+                !fix && <p className="empty">No changes yet. Click a step and say a change, or rehearse a call, point at a bad line and say the fix.</p>
+              )}
             </>
           )}
         </section>

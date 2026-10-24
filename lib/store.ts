@@ -2,7 +2,8 @@
 import type { Bot, Interview } from "./bot";
 
 export type Answer = { id: string; q: string; a: string };
-export type Draft = { id: string; brief: string; interview?: Interview; answers: Answer[]; bot?: Bot; updated: number };
+export type Change = { v: number; summary: string; before?: string; rule?: string; step?: string };
+export type Draft = { id: string; brief: string; interview?: Interview; answers: Answer[]; bot?: Bot; updated: number; log?: Change[] };
 
 const KEY = "rehearse:bots";
 

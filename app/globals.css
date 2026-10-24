@@ -388,3 +388,29 @@ body.listening .tries{opacity:0}
 @media (max-width:1399px){.side{display:none}}
 @media (min-width:1400px){.narrow{display:none!important} .known2{display:none}}
 @media (max-width:760px){.callrow{grid-template-columns:1fr;gap:14px;justify-items:center} .vpick,.vopts{align-items:center} .voicescene{overflow:auto}}
+
+/* ---------- rehearse: fixed layout (nothing jumps), bigger flow, the whole call scrolls ---------- */
+.callscene{justify-content:flex-start;padding-top:14px;overflow:hidden}
+.callscene .minimap{width:min(980px,100%);margin:12px 0 6px;flex:none} .callscene .minimap svg{max-height:300px !important}
+.callscene .subs{flex:1 1 auto;min-height:0;overflow-y:auto;justify-content:flex-start;gap:14px;width:min(820px,100%);padding:6px 6px 10px;mask-image:linear-gradient(transparent,#000 22px)}
+.callscene .subs .sub{display:block!important;opacity:1!important;transform:none!important}
+.callscene .subs .sub:not(:last-child){opacity:.55!important}
+.callscene .subs .sub:not(:last-child) p{font-size:clamp(16px,1.6vw,19px)}
+.callscene .subs>:first-child{margin-top:auto}
+/* speaker labels: a clean small mono, not bold typewriter */
+.sub small{font:500 10.5px var(--mono);letter-spacing:.12em;color:var(--faint)}
+/* flow: firmer lines and arrowheads */
+.e{stroke-width:1.9} .e.lit{stroke-width:2.8}
+.el{fill:var(--muted);font-size:12.5px}
+/* describe: the bot you had open is one click away */
+.resume{display:inline-flex;align-items:baseline;gap:8px;margin:0 0 22px;padding:8px 14px;border-radius:10px;border:1px solid var(--line);background:var(--panel);font:500 14px var(--body);color:var(--ink)}
+.resume small{font:500 10px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--faint)} .resume span{color:var(--accent)}
+.resume:hover{border-color:var(--accent)}
+/* changes: version history */
+.changes{justify-content:flex-start;padding-top:24px}
+.vlog{list-style:none;margin:18px 0 0;padding:0;width:min(760px,100%);border-top:1px solid var(--line)}
+.vlog li{display:flex;align-items:flex-start;gap:16px;padding:14px 4px;border-bottom:1px solid var(--line)}
+.vlog b{font:400 22px/1 var(--display);color:var(--accent);width:44px;flex:none}
+.vlog div{flex:1;min-width:0} .vlog p{font-size:15px} .vlog small{display:block;color:var(--muted);font-size:12.5px;margin-top:4px} .vlog s{color:var(--bad)}
+.vlog .btn{height:34px}
+.subs,.convo,.scene,.side,.xlist{scrollbar-width:thin;scrollbar-color:var(--line) transparent}
