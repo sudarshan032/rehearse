@@ -19,7 +19,7 @@ type SRClass = new () => {
 type Call = {
   stream: MediaStream; ac: AudioContext; an: AnalyserNode; history: Line[];
   phase: "listening" | "thinking" | "speaking"; since: number; lang: string;
-  sr?: InstanceType<SRClass>; loud?: boolean; loudSince?: number; turnStart?: number;
+  sr?: InstanceType<SRClass>; srText?: string; loud?: boolean; loudSince?: number; turnStart?: number;
   pcm: { t: number; d: Float32Array }[];
 };
 const srClass = () =>
@@ -721,7 +721,8 @@ export default function Stage() {
       sr.lang = c.lang;
       sr.interimResults = true;
       sr.continuous = true;
-      sr.onresult = (e) => setInterim(Array.from(e.results, (r) => r[0].transcript).join(" "));
+      c.srText = "";
+      sr.onresult = (e) => setInterim((c.srText = Array.from(e.results, (r) => r[0].transcript).join(" ")));
       sr.onerror = () => {};
       try {
         sr.start();
@@ -787,7 +788,11 @@ export default function Stage() {
       const stt = await res.json();
       if (!res.ok) throw new Error(stt.error ?? "Could not hear that");
       if (call.current !== c) return;
-      log("call-heard", { text: stt.text, lang: stt.lang, ms: stt.ms, bytes: audio.size });
+      // Whisper is weak at Telugu and Hindi; the browser's own recogniser (Google, free) is much better there.
+      // When Whisper says you spoke Telugu/Hindi and the recogniser was listening in that language, use its words.
+      const sr = c.srText?.trim();
+      if ((stt.lang === "te" || stt.lang === "hi") && sr && c.lang === srLang(stt.lang)) stt.text = sr;
+      log("call-heard", { text: stt.text, whisper: sr && stt.text === sr ? "replaced" : "used", lang: stt.lang, ms: stt.ms, bytes: audio.size });
       if (!stt.text?.trim()) return listen(c);
       const t1 = performance.now();
       c.lang = srLang(langOf(stt.text).toLowerCase());

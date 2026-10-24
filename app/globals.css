@@ -398,7 +398,9 @@ body.listening .tries{opacity:0}
 .callscene .subs .sub:not(:last-child) p{font-size:clamp(16px,1.6vw,19px)}
 .callscene .subs>:first-child{margin-top:auto}
 /* speaker labels: a clean small mono, not bold typewriter */
-.sub small{font:600 10.5px var(--mono);letter-spacing:.12em;color:var(--muted)} /* readable, not faded */
+.sub small{font:600 10.5px var(--mono);letter-spacing:.12em;color:var(--ink);opacity:1} /* same strength as the line it names */
+.sub.me small{color:var(--accent)}
+.callscene .subs .sub:not(:last-child){opacity:.75!important}
 /* flow: firmer lines and arrowheads */
 .e{stroke-width:1.9} .e.lit{stroke-width:2.8}
 .el{fill:var(--muted);font-size:12.5px}
