@@ -93,6 +93,7 @@ export async function askJSON<T extends z.ZodType>(
 }
 
 export function fail(e: unknown) {
-  const msg = e instanceof LLMError ? `The free AI is busy right now (${e.message}). Try again in a minute.` : "Something went wrong.";
+  if (e instanceof LLMError) console.warn("[llm]", e.message);
+  const msg = e instanceof LLMError ? "The free AI is busy for a moment." : "Something went wrong.";
   return Response.json({ error: msg }, { status: 503 });
 }

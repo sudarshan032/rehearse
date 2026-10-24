@@ -131,6 +131,7 @@ export default function Stage() {
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const media = useRef<MediaRecorder | null>(null);
   const queued = useRef(false);
+  const lastSaid = useRef("");
   const later = useRef<string[]>([]); // dictations that arrived while another one was waiting
   const lastTurn = useRef(""); // the call turn that broke a rule, for "@Last reply"
   const clickBase = useRef<{ at: number; text: string }>({ at: 0, text: "" });
@@ -312,7 +313,9 @@ export default function Stage() {
     try {
       return await fn();
     } catch (e) {
-      setHeard((h) => ({ q: h?.q ?? "", res: (e as Error).message, err: true }));
+      // Keep what was said in the box, so a busy AI never costs a re-dictation.
+      if (lastSaid.current && !inp.current?.value.trim()) setBox(lastSaid.current);
+      setHeard((h) => ({ q: h?.q ?? "", res: `${(e as Error).message} Your words are still in the box: press Enter to try again.`, err: true }));
     } finally {
       setBusy("");
     }
@@ -515,6 +518,7 @@ export default function Stage() {
     }
     setText("");
     log("said", { scene, text: t, targets: targets.map((x) => x.token) });
+    lastSaid.current = t;
     const stage = SAY_STAGE[scene];
     const pointing = !!sel;
     const low = t.toLowerCase().replace(/[.!?,]+$/g, "").trim();

@@ -84,5 +84,7 @@ A change is only worth doing if it helps one of these. Full checklist: `docs/RUB
 ## Stack defaults (free)
 
 - Next.js (App Router) + TypeScript + Tailwind + React Flow on Vercel Hobby; route handlers keep keys server-side.
-- LLM: Groq free (primary), OpenRouter free (fallback). STT: Deepgram nova-3 multi. TTS: Murf Falcon 2.1 (Telugu Pooja, Hindi Anisha hi-IN, Indian English).
+- LLM: Groq free (gpt-oss-120b, then qwen3.8-27b, gpt-oss-20b), OpenRouter free (fallback). Free tier = 8k tokens/min per model: don't burst-test.
+- Voice test (decided 24 Oct, zero credit spend): STT Groq Whisper large-v3-turbo; TTS KittenTTS in the browser (English) + system voices (hi-IN Lekha, te-IN Geeta). Deepgram/Murf code exists but is OFF unless `PAID_VOICE=1`.
+- UI: one page, components/Stage.tsx (scenes + one fixed input, @mentions, voice navigation) + components/Flow.tsx (SVG layout). Plain CSS in app/globals.css (Tailwind removed). Dev input log: .cache/session.log. Wispr history (read a copy only) shows whether Wispr pasted.
 - Browser local storage for bots. No sign-in, no database.
