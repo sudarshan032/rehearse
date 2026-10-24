@@ -40,3 +40,6 @@ space/telugu-onnx/web/model/
 
 # KittenTTS model (fetch with: node scripts/get-kitten.mjs)
 public/models/kitten/
+
+# Claude Code local state
+.claude/

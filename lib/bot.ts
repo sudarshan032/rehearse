@@ -95,7 +95,7 @@ export function finishBot(draft: z.infer<typeof BotDraft>, id: string, llm: stri
     id,
     version,
     persona: { tone: draft.persona.tone, voice: { provider: "murf", lang: LANGS[lang].voice } },
-    stack: { stt: "deepgram:nova-3", llm, tts: "murf:falcon-2.1" },
+    stack: { stt: "groq:whisper-large-v3-turbo", llm, tts: "kittentts+browser" },
     prompt: "",
   };
   bot.prompt = compilePrompt(bot);

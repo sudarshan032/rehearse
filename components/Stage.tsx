@@ -5,6 +5,7 @@ import { guessIntent, personaOf, type Stage as SayStage, type Tab } from "@/lib/
 import { getDraft, listDrafts, newId, post, saveDraft, type Draft } from "@/lib/store";
 import { EXPORTS } from "@/lib/export";
 import { SAMPLE_BOT, SAMPLE_BRIEF, SAMPLE_CALL, SAMPLE_ID } from "@/lib/sample";
+import { preloadVoice, speak, type SpeakLang } from "@/lib/speak";
 import { Flow } from "./Flow";
 
 type Scene = "describe" | "questions" | "building" | "blueprint" | "rules" | "knowledge" | "prompt" | "stack" | "call" | "fix" | "voice" | "export" | "bots";
@@ -29,9 +30,9 @@ const HINTS: Record<Scene, string[]> = {
   knowledge: ["add: the trial is 14 days", "show the prompt", "back to the flow"],
   prompt: ["make it more polite", "show the stack", "back to the flow"],
   stack: ["voice test", "export", "back to the flow"],
-  call: ["It's too expensive for me", "Can I get a refund if I don't like it?", "stop the call"],
+  call: ["It's too expensive for me", "speak the replies", "stop the call"],
   fix: ["replay", "rehearse again", "back to the flow"],
-  voice: ["back to the flow", "export", "rehearse"],
+  voice: ["hold the green button and talk", "back to the flow", "export"],
   export: ["download", "start a new bot", "show my bots"],
   bots: ["start a new bot", "open the first one"],
 };
@@ -75,7 +76,7 @@ const INTRO: [string, boolean][] = [
 ];
 
 const langOf = (s: string) => (/[ఀ-౿]/.test(s) ? "TE" : /[ऀ-ॿ]/.test(s) ? "HI" : "EN");
-const ttsLang = (s: string, bot: Bot) => (/[ఀ-౿]/.test(s) ? "te-IN" : /[ऀ-ॿ]/.test(s) ? "hi-IN" : bot.languages.includes("en") ? "en-IN" : bot.persona.voice.lang);
+const ttsLang = (s: string, bot: Bot): SpeakLang => (/[ఀ-౿]/.test(s) ? "te-IN" : /[ऀ-ॿ]/.test(s) ? "hi-IN" : bot.languages.includes("en") ? "en-IN" : (bot.persona.voice.lang as SpeakLang));
 const undoRe = /^(undo|undo that|undo it|revert|wapas karo)\b/i;
 const replayRe = /^(replay|replay (it|that|the turn)|try (it )?again|again)\b/i;
 const backRe = /^(back|go back|previous|wapas|venakki)\.?$/i;
@@ -115,6 +116,7 @@ export default function Stage() {
   const [heard, setHeard] = useState<{ q: string; res: string; err?: boolean; ans?: boolean } | null>(null);
   const [panel, setPanel] = useState(true);
   const [zoom, setZoom] = useState(1);
+  const [talk, setTalk] = useState(false); // speak the bot's replies out loud in a rehearsal
   const [changed, setChanged] = useState<EditResult["changed"] & { summary: string } | null>(null);
   const [undo, setUndo] = useState<Bot[]>([]);
   const [lines, setLines] = useState<Line[]>([]);
@@ -270,6 +272,11 @@ export default function Stage() {
     el.style.height = `${Math.min(el.scrollHeight, window.innerHeight * 0.4)}px`;
   }, [text]);
 
+  // Load the free voice model when the Voice test opens (first time only, a few seconds).
+  useEffect(() => {
+    if (scene === "voice" || (scene === "call" && talk)) preloadVoice().catch(() => {});
+  }, [scene, talk]);
+
   // After every screen change or finished step, the box gets the focus back.
   useEffect(() => {
     if (document.activeElement !== inp.current && !(document.activeElement instanceof HTMLInputElement)) inp.current?.focus({ preventScroll: true });
@@ -403,6 +410,7 @@ export default function Stage() {
     if (!r) return null;
     const line: Line = { role: "bot", text: r.reply, step_id: r.step_id, ended: r.ended };
     setLines([...mine, line]);
+    if (talk) speak(r.reply, ttsLang(r.reply, b)).catch(() => {});
     const c = await run("Checking the rules", () =>
       post<{ broken: Broken[] }>("/api/check", { rules: b.rules.map(({ id, kind, text }) => ({ id, kind, text })), reply: r.reply, caller: t, knowledge: b.knowledge.map(({ text }) => ({ text })) }),
     );
@@ -434,7 +442,7 @@ export default function Stage() {
     }
   }
 
-  // ---------- voice test (real mic → Deepgram → Groq → Murf) ----------
+  // ---------- voice test (real mic → Whisper → LLM → free voice) ----------
   async function micStart() {
     if (rec || busy) return;
     try {
@@ -476,17 +484,13 @@ export default function Stage() {
     const t2 = performance.now();
     setLines([...lines, { role: "caller", text: heardRes.text }, { role: "bot", text: r.reply, step_id: r.step_id, ended: r.ended }]);
     say(heardRes.text, "Speaking…");
-    const res = await fetch("/api/tts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: r.reply.slice(0, 300), lang: ttsLang(r.reply, bot) }) });
-    if (!res.ok) {
-      const j = await res.json().catch(() => ({}));
+    try {
+      const { firstSoundMs, engine } = await speak(r.reply, ttsLang(r.reply, bot));
+      setTiming({ hear: t1 - t0, think: t2 - t1, speak: firstSoundMs, total: t2 - t0 + firstSoundMs, left: engine });
+    } catch (e) {
       setTiming({ hear: t1 - t0, think: t2 - t1, speak: 0, total: t2 - t0 });
-      return say(heardRes.text, j.error ?? "Voice is off. Text reply shown.", { err: true });
+      return say(heardRes.text, (e as Error).message || "Voice is off. Text reply shown.", { err: true });
     }
-    const blob = await res.blob();
-    const t3 = performance.now();
-    const ttfb = Number(res.headers.get("x-ttfb-ms")) || t3 - t2;
-    setTiming({ hear: t1 - t0, think: t2 - t1, speak: ttfb, total: t1 - t0 + (t2 - t1) + ttfb, left: res.headers.get("x-tts-left") ?? undefined });
-    new Audio(URL.createObjectURL(blob)).play().catch(() => {});
     say(heardRes.text, "Bot replied out loud");
   }
 
@@ -516,6 +520,8 @@ export default function Stage() {
     if (/^(show|open) (the )?(panel|path|sidebar|side panel)$/.test(low)) return setPanel(true), say(t, "Panel shown");
     if (/\b(play|show)\b.*\b(sample|saved) call\b|^play (the )?(call|rehearsal)$/.test(low)) return bot ? playSample(t) : openSample(t);
     if (/\b(sample|example|demo)( bot)?$/.test(low) && words <= 5 && scene !== "call") return openSample(t);
+    if (/^(speak|say|read) (the )?(replies|answers)( out loud| aloud)?$|^(voice|sound) on$|^unmute$/.test(low)) return setTalk(true), say(t, "The bot will speak its replies");
+    if (/^(mute|stop speaking|voice off|sound off|quiet)$/.test(low)) return setTalk(false), say(t, "Muted");
     if (/^(zoom in|bigger|make it bigger)$/.test(low)) return setZoom((z) => Math.min(2.2, z + 0.4)), say(t, "Zoomed in");
     if (/^(zoom out|smaller|make it smaller)$/.test(low)) return setZoom((z) => Math.max(1, z - 0.4)), say(t, "Zoomed out");
     if (/^(fit|fit (it|the flow)|reset zoom|whole flow)$/.test(low)) return setZoom(1), say(t, "Whole flow");
@@ -884,11 +890,11 @@ export default function Stage() {
               <h2>Stack &amp; speed</h2>
               <div className="facet">
                 <div className="stk">
-                  <div><small>Hears</small><b>Deepgram nova-3</b><span>Telugu, Hindi, English mixed</span></div>
+                  <div><small>Hears</small><b>Whisper large v3 turbo</b><span>Groq free tier · Telugu, Hindi, English</span></div>
                   <div><small>Thinks</small><b>{bot.stack.llm.split(":").slice(1).join(":")}</b><span>{bot.stack.llm.split(":")[0]} free tier</span></div>
-                  <div><small>Speaks</small><b>Murf Falcon 2.1</b><span>{bot.persona.voice.lang}</span></div>
+                  <div><small>Speaks</small><b>KittenTTS + browser voices</b><span>free · English in the browser, Hindi and Telugu by the system voice</span></div>
                 </div>
-                <p className="note">{timing ? `Last voice test: ${(timing.total / 1000).toFixed(2)} s to the first sound.` : "Real reply times show here after a voice test. Say “voice test”."}</p>
+                <p className="note">{timing ? `Last voice test: ${(timing.total / 1000).toFixed(2)} s to the first sound.` : "Real reply times show here after a voice test. Say “voice test”. For production, the same bot runs on Deepgram nova-3 and Murf Falcon with your own keys."}</p>
               </div>
             </>
           )}
@@ -937,13 +943,20 @@ export default function Stage() {
         <section className={`scene ${scene === "voice" ? "on" : ""}`}>
           {bot && (
             <>
-              <span className="live"><i />Voice test · real mic → Deepgram → Groq → Murf</span>
+              <span className="live"><i />Voice test · your mic → Whisper (Groq) → {bot.stack.llm.split(":").slice(1).join(":")} → free voice</span>
               <button className={`micbtn ${rec ? "rec" : ""}`} aria-label="Hold to talk"
                 onPointerDown={micStart} onPointerUp={micStop} onPointerLeave={micStop}>
                 <I d={IC.mic} />
               </button>
               <p className="note">{rec ? "Listening… let go when you finish" : "Hold the button and talk like a real caller"}</p>
-              <div className="big"><b>{timing ? `${(timing.total / 1000).toFixed(2)} s` : "0.00 s"}</b><span>to the bot’s first sound</span></div>
+              {lines.length > 0 && (
+                <div className="vlines">
+                  {lines.slice(-2).map((l, i) => (
+                    <div key={i} className={`sub ${l.role === "caller" ? "me" : ""}`}><small>{l.role === "caller" ? "You · heard by Whisper" : `Bot · ${timing?.left ?? "voice"}`}</small><p>{l.text}</p></div>
+                  ))}
+                </div>
+              )}
+              <div className="big"><b>{timing ? `${(timing.total / 1000).toFixed(2)} s` : "0.00 s"}</b><span>from letting go to the bot’s first sound</span></div>
               {timing && (
                 <>
                   <div className="bar">
@@ -952,10 +965,9 @@ export default function Stage() {
                     {timing.speak > 0 && <span style={{ background: "var(--s4)", flexGrow: timing.speak }}>First sound {(timing.speak / 1000).toFixed(2)}s</span>}
                   </div>
                   <div className="legend">
-                    <span><i style={{ background: "var(--s2)" }} />Hearing · Deepgram</span>
+                    <span><i style={{ background: "var(--s2)" }} />Hearing · Whisper</span>
                     <span><i style={{ background: "var(--s3)" }} />Thinking · Groq</span>
-                    <span><i style={{ background: "var(--s4)" }} />First sound · Murf</span>
-                    {timing.left && <span>{timing.left} free voice replies left today</span>}
+                    <span><i style={{ background: "var(--s4)" }} />First sound · {timing.left ?? "voice"}</span>
                   </div>
                 </>
               )}

@@ -53,7 +53,10 @@ async function groq(key: string, audio: ArrayBuffer, type: string, langs: string
   });
   if (!res.ok) return { error: `Speech-to-text failed (Groq ${res.status}). Try again or type.` };
   const j = await res.json();
-  return { text: String(j?.text ?? "").trim(), lang: WHISPER_LANG[String(j?.language ?? "").toLowerCase()] };
+  const text = String(j?.text ?? "").trim();
+  // Whisper invents these on silence or noise: treat them as "heard nothing".
+  const ghost = /^(thank you\.?|thanks for watching!?|you\.?|bye\.?|\.+)$/i.test(text);
+  return { text: ghost ? "" : text, lang: WHISPER_LANG[String(j?.language ?? "").toLowerCase()] };
 }
 
 async function deepgram(key: string, audio: ArrayBuffer, type: string, langs: string[]) {
