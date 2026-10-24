@@ -37,3 +37,6 @@ space/telugu-onnx/web/model/
 
 # Cached voice audio (TTS)
 .cache/
+
+# KittenTTS model (fetch with: node scripts/get-kitten.mjs)
+public/models/kitten/

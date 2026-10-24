@@ -88,7 +88,6 @@ function download(name: string, text: string, type: string) {
   Object.assign(document.createElement("a"), { href: url, download: name }).click();
   URL.revokeObjectURL(url);
 }
-const slug = (s: string) => s.replace(/\W+/g, "-").replace(/^-|-$/g, "").toLowerCase() || "bot";
 
 const I = ({ d, w = 2 }: { d: string; w?: number }) => (
   <svg className="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={w} strokeLinecap="round" strokeLinejoin="round" dangerouslySetInnerHTML={{ __html: d }} />
