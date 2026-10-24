@@ -151,3 +151,17 @@ body.listening .tries{opacity:0}
 .empty{color:var(--muted);font-size:17px;text-align:center}
 @media (max-width:760px){.bots{grid-template-columns:1fr}}
 .facet ol{margin:0;padding-left:24px}
+/* side panel: the path, always visible */
+.prog{display:none}
+.journey{position:fixed;left:18px;top:84px;width:168px;display:flex;flex-direction:column;gap:2px;z-index:26}
+.journey .jt{font:600 10.5px var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 6px 10px}
+.journey button{display:flex;align-items:center;gap:10px;text-align:left;padding:6px 10px;border-radius:10px;font:600 14px var(--body);color:var(--ink)}
+.journey button i{width:8px;height:8px;border-radius:50%;border:1.5px solid var(--muted);flex:none}
+.journey button.sub{padding-left:28px;font-weight:500;font-size:13px}
+.journey button:hover:not(:disabled){background:var(--chip)}
+.journey button:disabled{opacity:.35;cursor:default}
+.journey button.here{background:var(--accent-soft);color:var(--accent)}
+.journey button.here i{background:var(--accent);border-color:var(--accent)}
+.journey .jh{font-size:12px;color:var(--muted);margin:12px 10px 0;line-height:1.45}
+@media (min-width:1100px){main{left:200px}}
+@media (max-width:1099px){.journey{display:none}}

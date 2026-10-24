@@ -40,6 +40,31 @@ const PLACEHOLDER: Partial<Record<Scene, string>> = {
   fix: "Say the fix, or “replay”…",
 };
 
+// Dev only: input and focus events go to .cache/session.log so input problems can be read later.
+const log = (ev: string, data: Record<string, unknown> = {}) => {
+  if (process.env.NODE_ENV === "production") return;
+  fetch("/api/log", { method: "POST", body: JSON.stringify({ ev, ...data }), keepalive: true }).catch(() => {});
+};
+
+// The journey, in order. The side panel shows it; "next", "back" and "go to …" move along it.
+const JOURNEY: { s: Scene; name: string; sub?: boolean; re: RegExp }[] = [
+  { s: "describe", name: "Describe", re: /\b(home( ?page)?|start(ing)? page|beginning|describe)\b/ },
+  { s: "questions", name: "Questions", re: /\bquestions?\b/ },
+  { s: "blueprint", name: "Flow", re: /\b(flow|blueprint|canvas|diagram|steps)\b/ },
+  { s: "rules", name: "Rules", sub: true, re: /\brules?\b/ },
+  { s: "knowledge", name: "Facts", sub: true, re: /\b(facts?|knowledge)\b/ },
+  { s: "prompt", name: "Prompt", sub: true, re: /\bprompt\b/ },
+  { s: "stack", name: "Stack & speed", sub: true, re: /\b(stack|speed)\b/ },
+  { s: "call", name: "Rehearse", re: /\b(rehears\w*|call|practice)\b/ },
+  { s: "fix", name: "Fix", re: /\bfix(es)?\b/ },
+  { s: "voice", name: "Voice test", re: /\bvoice( test)?\b/ },
+  { s: "export", name: "Export", re: /\b(export|download)\b/ },
+  { s: "bots", name: "My bots", re: /\b(my bots|all bots|bots)\b/ },
+];
+const GO = /^(please |ok(ay)? |now |and )?(go|move|take me|jump|switch|show|open|see|view|display|let'?s go|let me see|bring( up)?|back)\b/;
+const NEXT = /^(please |ok(ay)? |now |just )?((move|go) )?(forward|next|onward|ahead|on)( step| page| one)?$|^(continue|next step|move on|go ahead|proceed)$/;
+const PREV = /^(please |ok(ay)? |now |just )?((move|go|step) )?(back(ward)?|previous|before)( step| page| one)?$|^(wapas|venakki)$/;
+
 const langOf = (s: string) => (/[ఀ-౿]/.test(s) ? "TE" : /[ऀ-ॿ]/.test(s) ? "HI" : "EN");
 const ttsLang = (s: string, bot: Bot) => (/[ఀ-౿]/.test(s) ? "te-IN" : /[ऀ-ॿ]/.test(s) ? "hi-IN" : bot.languages.includes("en") ? "en-IN" : bot.persona.voice.lang);
 const undoRe = /^(undo|undo that|undo it|revert|wapas karo)\b/i;
@@ -117,14 +142,53 @@ export default function Stage() {
         const a = document.activeElement;
         if (a !== inp.current && !(a instanceof HTMLInputElement) && !String(getSelection())) inp.current?.focus({ preventScroll: true });
       }, 0);
+    // A paste that lands anywhere on the page goes into the box.
+    const onPaste = (e: ClipboardEvent) => {
+      const el = inp.current;
+      log("paste", { target: (e.target as HTMLElement)?.tagName, inBox: e.target === el, len: e.clipboardData?.getData("text").length });
+      if (!el || e.target === el) return;
+      const t = e.clipboardData?.getData("text");
+      if (!t) return;
+      e.preventDefault();
+      el.focus();
+      el.value = (el.value ? el.value + " " : "") + t;
+      el.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertFromPaste" }));
+    };
+    // Typing anywhere goes into the box too.
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.metaKey && e.key.toLowerCase() === "v") log("cmd+v", { active: document.activeElement?.tagName, inBox: document.activeElement === inp.current });
+      if (document.activeElement === inp.current || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key.length === 1 && !(document.activeElement instanceof HTMLInputElement)) inp.current?.focus({ preventScroll: true });
+    };
+    const onBlur = () => log("blur", { to: document.activeElement?.tagName });
+    const onWinBlur = () => log("window-blur", { active: document.activeElement?.tagName });
+    const onWinFocus = () => {
+      log("window-focus", { active: document.activeElement?.tagName });
+      refocus();
+    };
+    const el = inp.current;
     document.addEventListener("mouseup", refocus);
-    window.addEventListener("focus", refocus);
-    inp.current?.focus();
+    document.addEventListener("paste", onPaste, true);
+    document.addEventListener("keydown", onKeyDown, true);
+    window.addEventListener("focus", onWinFocus);
+    window.addEventListener("blur", onWinBlur);
+    el?.addEventListener("blur", onBlur);
+    el?.focus();
     return () => {
       document.removeEventListener("mouseup", refocus);
-      window.removeEventListener("focus", refocus);
+      document.removeEventListener("paste", onPaste, true);
+      document.removeEventListener("keydown", onKeyDown, true);
+      window.removeEventListener("focus", onWinFocus);
+      window.removeEventListener("blur", onWinBlur);
+      el?.removeEventListener("blur", onBlur);
     };
   }, []);
+
+  // After every screen change or finished step, the box gets the focus back.
+  useEffect(() => {
+    if (document.activeElement !== inp.current && !(document.activeElement instanceof HTMLInputElement)) inp.current?.focus({ preventScroll: true });
+    log("scene", { scene, busy });
+  }, [scene, busy]);
 
   const store = useCallback((d: Draft) => {
     setDraft(d);
@@ -347,8 +411,18 @@ export default function Stage() {
       return;
     }
     setText("");
+    log("said", { scene, text: t });
     const stage = SAY_STAGE[scene];
     const pointing = !!sel;
+    const low = t.toLowerCase().replace(/[.!?,]+$/g, "").trim();
+    const words = low.split(/\s+/).length;
+
+    if (NEXT.test(low)) return step(t, 1);
+    if (PREV.test(low)) return back(), say(t, "Back");
+    if (words <= 7 && (GO.test(low) || words <= 2)) {
+      const place = JOURNEY.find((j) => j.re.test(low));
+      if (place && !(scene === "call" && place.s === "call")) return goTo(t, place.s);
+    }
 
     if (backRe.test(t)) return back(), say(t, "Back");
     if (undoRe.test(t) && bot) return doUndo(t);
@@ -390,6 +464,25 @@ export default function Stage() {
     if (r.intent === "brief") return brief(t);
     if (r.intent === "question") return say(t, r.answer ?? "", { ans: true });
     say(t, "Not sure what to do with that. Try one of the hints.", { err: true });
+  }
+
+  function goTo(t: string, s: Scene) {
+    if (s === "describe") return nav(t, "home");
+    if (s === "questions" && !draft?.interview) return say(t, "No questions yet. Describe a bot first.", { err: true });
+    if (s === "bots") return go("bots"), say(t, "My bots");
+    if (s !== "questions" && !bot) return say(t, "Build the bot first", { err: true });
+    if (s === "fix" && !fix) return say(t, "Nothing fixed yet. Rehearse first.", { err: true });
+    if (s === "call") return lines.length ? (go("call"), say(t, "Back to the call")) : startCall(t);
+    go(s);
+    say(t, `Showing ${JOURNEY.find((j) => j.s === s)?.name}`);
+  }
+  function step(t: string, dir: 1 | -1) {
+    const order: Scene[] = ["describe", "questions", "blueprint", "call", "voice", "export"];
+    const here = order.indexOf(scene === "building" ? "questions" : ["rules", "knowledge", "prompt", "stack"].includes(scene) ? "blueprint" : scene === "fix" ? "call" : scene);
+    const to = order[Math.min(order.length - 1, Math.max(0, here + dir))];
+    if (to === scene) return say(t, "This is the last step");
+    if (scene === "questions" && dir === 1) return build(t, "");
+    goTo(t, to);
   }
 
   function nav(t: string, tab: Tab) {
@@ -448,7 +541,7 @@ export default function Stage() {
         setText(el.value);
         setCounting(true);
         clearTimeout(timer.current);
-        timer.current = setTimeout(() => handle(el.value), 1200);
+        timer.current = setTimeout(() => handle(el.value), 700);
       }
     }, 300);
     return () => clearInterval(id);
@@ -459,11 +552,12 @@ export default function Stage() {
     const v = e.currentTarget.value;
     const ie = e.nativeEvent as InputEvent;
     const jump = v.length - text.length;
+    log("input", { type: ie.inputType, len: v.length, jump, scene });
     setText(v);
     clearTimeout(timer.current);
     if (ie.inputType === "insertFromPaste" || ie.inputType === "insertReplacementText" || jump > 1) {
       setCounting(true);
-      timer.current = setTimeout(() => handle(v), 1200);
+      timer.current = setTimeout(() => handle(v), 700);
     } else setCounting(false);
   }
   function onKey(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -518,6 +612,20 @@ export default function Stage() {
           <button className="iconbtn" onClick={() => toggleTheme()} aria-label="Switch light or dark"><I d={theme === "dark" ? IC.sun : IC.moon} /></button>
         </div>
       </header>
+
+      <nav className="journey" aria-label="Where you are">
+        <div className="jt">Your path</div>
+        {JOURNEY.map((j) => {
+          const here = scene === j.s || (scene === "building" && j.s === "questions");
+          const ok = j.s === "describe" || j.s === "bots" || (j.s === "questions" ? !!draft?.interview : !!bot && (j.s !== "fix" || !!fix));
+          return (
+            <button key={j.s} className={`${j.sub ? "sub" : ""} ${here ? "here" : ""}`} disabled={!ok} onClick={() => goTo("", j.s)}>
+              <i />{j.name}
+            </button>
+          );
+        })}
+        <div className="jh">Say “go to rules”, “next” or “back”.{past.length > 0 && <> Came from: <b>{JOURNEY.find((j) => j.s === past[past.length - 1])?.name ?? "Questions"}</b></>}</div>
+      </nav>
 
       <main>
         <section className={`scene ${scene === "describe" ? "on" : ""}`}>
