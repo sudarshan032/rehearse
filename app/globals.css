@@ -21,14 +21,14 @@
   color-scheme:dark;
 }
 :root[data-theme=light]{
-  --bg:#f2ece1;--panel:#fbf7ef;--raise:#fffdf8;--ink:#1f1913;--muted:#6b6052;--faint:#9a8e7e;--line:#ddd2bf;
-  --paper:#fffdf7;--paper-ink:#1f1913;--paper-muted:#6b6052;--paper-line:#e3d8c4;
-  --accent:#b8650a;--on-accent:#fff;--accent-soft:color-mix(in oklab,#b8650a 12%,transparent);
+  --bg:#ebe3d4;--panel:#fbf8f2;--raise:#fff;--ink:#17120d;--muted:#51483d;--faint:#7c7162;--line:#c9bca6;
+  --paper:#fffefb;--paper-ink:#17120d;--paper-muted:#5c5246;--paper-line:#cfc2ab;
+  --accent:#9c5206;--on-accent:#fff;--accent-soft:color-mix(in oklab,#9c5206 13%,transparent);
   --bad:#c2321c;--bad-soft:color-mix(in oklab,#c2321c 10%,transparent);--pencil:#c2321c;
   --ok:#2f7a4a;--ok-soft:color-mix(in oklab,#2f7a4a 11%,transparent);
   --warn:#b8650a;--warn-soft:color-mix(in oklab,#b8650a 12%,transparent);
-  --chip:#e9e1d2;--glow:color-mix(in oklab,#e9a23b 16%,transparent);
-  --sh:0 1px 2px rgba(60,40,10,.06),0 16px 34px -16px rgba(60,40,10,.25);
+  --chip:#e0d6c4;--glow:color-mix(in oklab,#e9a23b 10%,transparent);
+  --sh:0 1px 2px rgba(60,40,10,.10),0 16px 34px -16px rgba(60,40,10,.35);
   --s2:#2f6f90;--s3:#3d7f53;--s4:#a8621b;
   color-scheme:light;
 }
@@ -161,7 +161,8 @@ main{position:fixed;top:64px;left:0;right:0;bottom:192px}
 .e{fill:none;stroke:var(--faint);stroke-width:1.6;stroke-dasharray:3000;animation:draw .9s ease-out both;animation-delay:var(--d,0s);marker-end:url(#mk)}
 .e.lit{stroke:var(--accent);stroke-width:2.6;stroke-dasharray:7 6;animation:march .7s linear infinite;marker-end:url(#mkA)}
 #mk path{fill:var(--faint)}
-.el{font:400 12px var(--mono);fill:var(--muted);paint-order:stroke;stroke:var(--bg);stroke-width:6px;stroke-linejoin:round;animation:fade .5s both;animation-delay:var(--d,0s)}
+/* no halo behind labels: on the glowing background it showed as a patch. Labels are placed clear of lines instead. */
+.el{font:400 12px var(--mono);fill:var(--muted);animation:fade .5s both;animation-delay:var(--d,0s)}
 .nd{animation:none!important}
 
 /* ---------- rules, facts, prompt, stack ---------- */
@@ -310,3 +311,40 @@ body.listening .tries{opacity:0}
   .minimap{overflow-x:auto} .minimap svg{min-width:560px}
   .stamp{font-size:17px;padding:2px 12px} .sub em{font-size:17px}
 }
+
+/* call control: a calm button and a small live meter; no rings or halos */
+.callctl{display:flex;flex-direction:column;align-items:center;gap:10px;margin:14px 0 6px}
+.callctl .micbtn,.micbtn.listening,.micbtn.thinking,.micbtn.speaking{width:64px;height:64px;margin:0;box-shadow:var(--sh);animation:none}
+.callctl .micbtn::after{display:none}
+.callctl .micbtn.off{width:84px;height:84px;background:var(--accent);color:var(--on-accent)}
+.callctl .micbtn:not(.off){background:var(--raise);color:var(--ink);border:1px solid var(--line);flex-direction:column;gap:0}
+.callctl .micbtn:not(.off):hover{border-color:var(--bad);color:var(--bad)}
+.micbtn .endlbl{font:500 10px var(--mono);letter-spacing:.08em;text-transform:uppercase;margin-top:-2px}
+.micbtn:not(.off) .ic{width:20px;height:20px}
+.vstate{display:flex;align-items:center;gap:10px;font:500 13.5px var(--body);color:var(--muted);min-height:24px}
+.callctl.listening .vstate{color:var(--ink)} .callctl.speaking .vstate{color:var(--accent)}
+.bars{display:inline-flex;align-items:center;gap:3px;height:22px}
+.bars i{width:3px;border-radius:2px;background:currentColor;height:4px;transition:height .08s}
+.callctl.listening .bars i{background:var(--ink)}
+.callctl.listening .bars i:nth-child(1),.callctl.listening .bars i:nth-child(5){height:calc(4px + var(--lv,0) * 8px)}
+.callctl.listening .bars i:nth-child(2),.callctl.listening .bars i:nth-child(4){height:calc(4px + var(--lv,0) * 14px)}
+.callctl.listening .bars i:nth-child(3){height:calc(4px + var(--lv,0) * 18px)}
+.callctl.speaking .bars i{animation:talk 1s ease-in-out infinite} .callctl.speaking .bars i:nth-child(2){animation-delay:.15s} .callctl.speaking .bars i:nth-child(3){animation-delay:.3s} .callctl.speaking .bars i:nth-child(4){animation-delay:.45s} .callctl.speaking .bars i:nth-child(5){animation-delay:.6s}
+.callctl.thinking .bars i{animation:bounce 1s infinite;height:4px} .callctl.thinking .bars i:nth-child(2){animation-delay:.12s} .callctl.thinking .bars i:nth-child(3){animation-delay:.24s} .callctl.thinking .bars i:nth-child(4){animation-delay:.36s} .callctl.thinking .bars i:nth-child(5){animation-delay:.48s}
+@keyframes talk{0%,100%{height:5px}50%{height:16px}}
+:root[data-theme=light] .n .bx{stroke-width:1.5;filter:drop-shadow(0 4px 8px rgba(60,40,10,.16))}
+/* export: one honest list, centred */
+.xlead{color:var(--muted);font-size:15px;text-align:center;margin:-8px 0 22px;max-width:52ch}
+.xlist{list-style:none;margin:0;padding:0;width:min(780px,100%);border-top:1px solid var(--line)}
+.xlist li{display:flex;align-items:center;gap:20px;padding:16px 4px;border-bottom:1px solid var(--line);animation:in .45s both;animation-delay:var(--d,0s)}
+.xlist li>div{flex:1;min-width:0} .xlist b{font:400 24px/1.15 var(--display)} .xlist p{font-size:14px;color:var(--muted);margin-top:3px;line-height:1.5}
+.xbtns{display:flex;gap:8px;flex:none}
+.btn{display:inline-flex;align-items:center;gap:7px;height:40px;font-size:14px;padding:0 16px;white-space:nowrap}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)} .btn.ghost:hover{border-color:var(--accent);color:var(--accent);filter:none}
+.hero .btn{height:46px;font-size:15px;padding:0 22px}
+@media (max-width:760px){.xlist li{flex-direction:column;align-items:flex-start;gap:10px}}
+.vpick{display:flex;flex-wrap:wrap;justify-content:center;gap:10px 18px;margin-top:6px}
+.vpick label{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.vpick select{font:500 13px var(--body);color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 8px;max-width:220px}
+.fxbtns{display:flex;gap:10px;margin-top:18px;padding-top:16px;border-top:1px solid var(--paper-line)}
+.fixcard .btn.ghost{color:var(--paper-ink);border-color:var(--paper-line)}

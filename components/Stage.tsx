@@ -5,7 +5,7 @@ import { guessIntent, personaOf, type Stage as SayStage, type Tab } from "@/lib/
 import { getDraft, listDrafts, newId, post, saveDraft, type Draft } from "@/lib/store";
 import { EXPORTS } from "@/lib/export";
 import { SAMPLE_BOT, SAMPLE_BRIEF, SAMPLE_CALL, SAMPLE_ID } from "@/lib/sample";
-import { preloadVoice, speak, stopSpeaking, type SpeakLang } from "@/lib/speak";
+import { pickVoiceName, preloadVoice, speak, stopSpeaking, voicesFor, type SpeakLang } from "@/lib/speak";
 import { Flow } from "./Flow";
 
 type Scene = "describe" | "questions" | "building" | "blueprint" | "rules" | "knowledge" | "prompt" | "stack" | "call" | "fix" | "voice" | "export" | "bots";
@@ -44,7 +44,7 @@ const HINTS: Record<Scene, string[]> = {
   call: ["It's too expensive for me", "speak the replies", "stop the call"],
   fix: ["replay", "rehearse again", "back to the flow"],
   voice: ["start the call", "end the call", "back to the flow"],
-  export: ["download", "start a new bot", "show my bots"],
+  export: ["copy the prompt", "download vapi", "start a new bot"],
   bots: ["start a new bot", "open the first one"],
 };
 const PLACEHOLDER: Partial<Record<Scene, string>> = {
@@ -156,7 +156,7 @@ export default function Stage() {
   bargeRef.current = barge;
   const convoEl = useRef<HTMLDivElement>(null);
   const raf = useRef(0);
-  const micEl = useRef<HTMLButtonElement>(null);
+  const micEl = useRef<HTMLDivElement>(null);
   const [theme, setTheme] = useState("light");
   const inp = useRef<HTMLTextAreaElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -713,8 +713,13 @@ export default function Stage() {
     const words = low.split(/\s+/).length;
 
     if (/^(clear|deselect|unselect|cancel)( (it|that|this|the selection|selection))?$/.test(mentionsIn(low).rest || low)) return setBox(""), say(t, "Cleared");
-    if (/^(hide|close|collapse) (the )?(panel|path|sidebar|side panel)$/.test(low)) return setPanel(false), say(t, "Panel hidden. Say “show the panel” to bring it back.");
-    if (/^(show|open) (the )?(panel|path|sidebar|side panel)$/.test(low)) return setPanel(true), say(t, "Panel shown");
+    // Screen controls are matched anywhere in the sentence and before navigation, so "drop the panel on the
+    // left in the describe page" hides the panel instead of going to Describe.
+    const PANEL = "(panel|sidebar|side ?bar|running order|navigation)"; // not "menu" or "path": bots talk about those
+    if (words <= 14 && new RegExp(`\\b(hide|close|collapse|drop|remove|minimi[sz]e|get rid of|fold)\\b.*\\b${PANEL}\\b`).test(low)) return setPanel(false), say(t, "Panel hidden. Say “show the panel” to bring it back.");
+    if (words <= 14 && new RegExp(`\\b(show|open|bring back|expand|unhide)\\b.*\\b${PANEL}\\b`).test(low)) return setPanel(true), say(t, "Panel shown");
+    const theme = low.match(/\b(dark|light) (mode|theme)\b/);
+    if (theme) return toggleTheme(theme[1] as "dark" | "light"), say(t, `${theme[1] === "dark" ? "Dark" : "Light"} mode`);
     if (/\b(play|show)\b.*\b(sample|saved) call\b|^play (the )?(call|rehearsal)$/.test(low)) return bot ? playSample(t) : openSample(t);
     if (/\b(sample|example|demo)( bot)?$/.test(low) && words <= 5 && scene !== "call") return openSample(t);
     if (/^(speak|say|read) (the )?(replies|answers)( out loud| aloud)?$|^(voice|sound) on$|^unmute$/.test(low)) return setTalk(true), say(t, "The bot will speak its replies");
@@ -747,8 +752,10 @@ export default function Stage() {
     if (/\b(turn on|allow|enable|let me)\b.*\binterrupt/i.test(low)) return setBarge(true), say(t, "Interruptions on: talk over the bot to cut in");
     if (scene === "voice" && /\b(start|begin|call|ring)\b.*\b(call|it|me)\b|^(start|call|go)$/i.test(low)) return void callStart();
     if ((scene === "call" || scene === "fix") && stopRe.test(t)) return go("blueprint"), say(t, "Call stopped");
+    const copyCmd = low.match(/^copy (the )?(prompt|vapi|retell)/);
+    if (copyCmd && bot) return copyAs(copyCmd[2]), say(t, `Copied the ${copyCmd[2] === "prompt" ? "prompt" : `${copyCmd[2]} command`}`);
     if (downloadRe.test(t) && bot) {
-      const x = EXPORTS.find((e) => low.includes(e.name.toLowerCase()) || low.includes(e.id)) ?? EXPORTS[0];
+      const x = EXPORTS.find((e) => low.includes(e.id) || (e.id === "json" && /\b(backup|json|everything)\b/.test(low))) ?? EXPORTS[0];
       return exportAs(x.id), say(t, `Downloaded ${x.name}`);
     }
     if (scene === "bots") {
@@ -869,7 +876,16 @@ export default function Stage() {
 
   function exportAs(id: string) {
     const x = EXPORTS.find((e) => e.id === id);
-    if (bot && x) download(...(x.file(bot) as [string, string, string]));
+    if (bot && x?.file) download(...x.file(bot));
+  }
+  const [copied, setCopied] = useState("");
+  function copyAs(id: string) {
+    const x = EXPORTS.find((e) => e.id === id);
+    if (!bot || !x?.copy) return;
+    navigator.clipboard?.writeText(x.copy(bot)).then(() => {
+      setCopied(id);
+      setTimeout(() => setCopied(""), 2000);
+    }, () => say("", "The browser blocked copying. Use Download instead.", { err: true }));
   }
 
   function toggleTheme(t?: string) {
@@ -1013,7 +1029,10 @@ export default function Stage() {
               <h1 className="h1s">Talk your voice bot <em>into shape.</em></h1>
               <p className="sub0">Say what the bot should do, in English, हिंदी, తెలుగు or a mix. Then rehearse a call, catch the line that breaks a rule, and fix it by saying so.</p>
               <div className="ctas">
-                <button className="btn" onClick={() => openSample("show me the sample")}>See a finished bot</button>
+                <button className="btn" onClick={() => {
+                  openSample("show me the sample");
+                  setTimeout(() => handleRef.current("play the sample call"), 1200);
+                }}>Watch a bot break a rule</button>
                 <span>or just start talking below</span>
               </div>
             </div>
@@ -1180,7 +1199,11 @@ export default function Stage() {
                   {fix.rule && <span className="rchip">{fix.rule}</span>}
                 </div>
                 <div className="fxr was"><small>Before</small><div><p><s>{fix.before}</s></p></div></div>
-                <div className="fxr now"><small>Now</small><div><p>{fix.summary}</p><em>Say “replay” to try the same line again.</em></div></div>
+                <div className="fxr now"><small>Now</small><div><p>{fix.summary}</p></div></div>
+                <div className="fxbtns">
+                  <button className="btn" onClick={() => handle("replay")}>Replay the same line</button>
+                  <button className="btn ghost" onClick={() => handle("undo")}>Undo this fix</button>
+                </div>
               </div>
             </>
           )}
@@ -1190,10 +1213,21 @@ export default function Stage() {
           {bot && (
             <>
               <span className="live"><i />Live voice test · Whisper (Groq) → {bot.stack.llm.split(":").slice(1).join(":")} → free voice</span>
-              <button ref={micEl} className={`micbtn ${live}`} aria-label={live === "off" ? "Start the call" : "End the call"} onClick={() => (live === "off" ? callStart() : callEnd())}>
-                <I d={live === "off" ? IC.phone : IC.x} />
-              </button>
-              <p className="note">{{ off: "Start the call. The bot greets you, then just talk. No buttons until you hang up.", listening: "Listening… it replies when you pause.", thinking: "Thinking…", speaking: barge ? "The bot is speaking. Cut in any time, like a real call." : "The bot is speaking." }[live]}</p>
+              <div className={`callctl ${live}`} ref={micEl}>
+                <button className={`micbtn ${live}`} aria-label={live === "off" ? "Start the call" : "End the call"} onClick={() => (live === "off" ? callStart() : callEnd())}>
+                  <I d={live === "off" ? IC.phone : IC.x} />
+                  {live !== "off" && <span className="endlbl">End</span>}
+                </button>
+                <div className="vstate" aria-live="polite">
+                  {live !== "off" && <span className="bars" aria-hidden><i /><i /><i /><i /><i /></span>}
+                  {{ off: "Start the call. The bot greets you, then just talk.", listening: "Listening", thinking: "Thinking", speaking: barge ? "Bot speaking · talk to cut in" : "Bot speaking" }[live]}
+                </div>
+              </div>
+              {live === "off" && (
+                <div className="vpick">
+                  {[...new Set(bot.languages.map(srLang))].map((l) => <VoicePick key={l} lang={l as SpeakLang} />)}
+                </div>
+              )}
               {live === "off" && !vlines.length && (
                 <p className="teach">
                   <b>How real calls go:</b> people pause, change their mind, and talk over the bot. Try it: start talking while the bot is
@@ -1239,20 +1273,20 @@ export default function Stage() {
         <section className={`scene ${scene === "export" ? "on" : ""}`}>
           {bot && (
             <>
-              <div className="eyebrow">Export · design here, run anywhere</div>
+              <div className="eyebrow">{bot.name} · v{bot.version} · {bot.flow.steps.length} steps · {bot.rules.length} rules</div>
               <h2>Take it with you.</h2>
-              <div className="xg x5">
+              <p className="xlead">No platform imports a file from a dashboard, so each option says exactly where it goes.</p>
+              <ol className="xlist">
                 {EXPORTS.map((x, i) => (
-                  <button key={x.id} className={`x ${i === 0 ? "on" : ""}`} style={{ ["--d" as string]: `${i * 0.06}s` }} onClick={() => exportAs(x.id)}>
-                    <b>{x.name}</b><small>{x.note}</small><em><I d={IC.dl} />“download {x.id}”</em>
-                  </button>
+                  <li key={x.id} style={{ ["--d" as string]: `${i * 0.05}s` }}>
+                    <div><b>{x.name}</b><p>{x.how}</p></div>
+                    <span className="xbtns">
+                      {x.copy && <button className={i === 0 ? "btn" : "btn ghost"} onClick={() => copyAs(x.id)}>{copied === x.id ? "Copied ✓" : x.copyLabel}</button>}
+                      {x.file && <button className="btn ghost" onClick={() => exportAs(x.id)}><I d={IC.dl} />Download</button>}
+                    </span>
+                  </li>
                 ))}
-              </div>
-              <div className="stats" style={{ gridTemplateColumns: "repeat(3,1fr)" }}>
-                <div><b>v{bot.version}</b><small>version</small></div>
-                <div><b>{bot.flow.steps.length}</b><small>steps</small></div>
-                <div><b>{bot.rules.length}</b><small>rules</small></div>
-              </div>
+              </ol>
             </>
           )}
         </section>
@@ -1292,6 +1326,32 @@ export default function Stage() {
         </div>
       </div>
     </>
+  );
+}
+
+// Pick the voice by ear: the browser's voices for one language, best-sounding first. Picking one plays a sample.
+const SAMPLE_LINE: Record<SpeakLang, string> = {
+  "en-IN": "Hi! This is how I will sound on your calls.",
+  "hi-IN": "नमस्ते! आपकी कॉल पर मेरी आवाज़ ऐसी होगी।",
+  "te-IN": "నమస్కారం! మీ కాల్స్‌లో నా గొంతు ఇలా ఉంటుంది.",
+};
+function VoicePick({ lang }: { lang: SpeakLang }) {
+  const [v, setV] = useState<{ list: string[]; picked: string }>({ list: [], picked: "" });
+  useEffect(() => {
+    voicesFor(lang).then(setV);
+  }, [lang]);
+  if (!v.list.length) return null;
+  return (
+    <label>
+      <span>{lang === "te-IN" ? "Telugu" : lang === "hi-IN" ? "Hindi" : "English"} voice</span>
+      <select value={v.picked || v.list[0]} onChange={(e) => {
+        pickVoiceName(lang, e.target.value);
+        setV({ ...v, picked: e.target.value });
+        speak(SAMPLE_LINE[lang], lang).catch(() => {});
+      }}>
+        {v.list.map((n) => <option key={n}>{n}</option>)}
+      </select>
+    </label>
   );
 }
 

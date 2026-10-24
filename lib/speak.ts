@@ -167,11 +167,37 @@ function browserVoices(): Promise<SpeechSynthesisVoice[]> {
   });
 }
 
+const norm = (v: SpeechSynthesisVoice) => v.lang.replace("_", "-").toLowerCase();
+// Best-sounding first: downloaded Enhanced/Premium voices, then Google's online voices, then the rest.
+const rank = (v: SpeechSynthesisVoice) => (/enhanced|premium|natural|neural/i.test(v.name) ? 4 : 0) + (/^google/i.test(v.name) ? 2 : 0) + Number(v.localService);
+const PREF = (lang: SpeakLang) => `rh-voice-${lang}`;
+
+/** The voices this browser has for a language, best first, and the one the user picked (if any). */
+export async function voicesFor(lang: SpeakLang) {
+  if (typeof speechSynthesis === "undefined") return { list: [], picked: "" };
+  const list = (await browserVoices()).filter((v) => norm(v).startsWith(lang.slice(0, 2).toLowerCase()))
+    .sort((a, b) => Number(norm(b) === lang.toLowerCase()) * 8 + rank(b) - Number(norm(a) === lang.toLowerCase()) * 8 - rank(a)) // Indian voices first
+    .map((v) => v.name);
+  let picked = "";
+  try {
+    picked = localStorage.getItem(PREF(lang)) ?? "";
+  } catch {}
+  return { list: [...new Set(list)], picked };
+}
+export function pickVoiceName(lang: SpeakLang, name: string) {
+  try {
+    localStorage.setItem(PREF(lang), name);
+  } catch {}
+}
+
 function pickVoice(all: SpeechSynthesisVoice[], lang: SpeakLang) {
-  // Enhanced/premium voices first (they sound human), then on-device ones (they start faster than network voices).
-  const rank = (v: SpeechSynthesisVoice) => (/enhanced|premium|natural/i.test(v.name) ? 2 : 0) + Number(v.localService);
+  let want = "";
+  try {
+    want = localStorage.getItem(PREF(lang)) ?? "";
+  } catch {}
+  const mine = want && all.find((v) => v.name === want);
+  if (mine) return mine;
   const voices = [...all].sort((a, b) => rank(b) - rank(a));
-  const norm = (v: SpeechSynthesisVoice) => v.lang.replace("_", "-").toLowerCase();
   const tries = [lang.toLowerCase(), lang.slice(0, 2), "en-in", "en"];
   for (const t of tries) {
     const v = voices.find((x) => norm(x) === t) ?? voices.find((x) => norm(x).startsWith(t));
