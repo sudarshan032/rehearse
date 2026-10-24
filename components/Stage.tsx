@@ -152,6 +152,8 @@ export default function Stage() {
   const [spoken, setSpoken] = useState(0);
   const spokenRef = useRef(0);
   const [barge, setBarge] = useState(true);
+  const sceneRef = useRef(scene);
+  sceneRef.current = scene;
   const bargeRef = useRef(true);
   bargeRef.current = barge;
   const convoEl = useRef<HTMLDivElement>(null);
@@ -522,6 +524,7 @@ export default function Stage() {
     setVlines([]);
     setInterim("");
     setTiming(null);
+    setHeard(null);
     watch(c);
     const start = bot.flow.steps.find((x) => x.kind === "start") ?? bot.flow.steps[0];
     await botSays(start.says, start.id, false);
@@ -854,6 +857,7 @@ export default function Stage() {
     say(t, "Playing the saved sample call");
     SAMPLE_CALL.forEach((l, i) =>
       setTimeout(() => {
+        if (sceneRef.current !== "call") return; // you left the call: stop playing it
         setLines(SAMPLE_CALL.slice(0, i + 1));
         if (l.broken) {
           setVig("bad");
@@ -1209,25 +1213,36 @@ export default function Stage() {
           )}
         </section>
 
-        <section className={`scene ${scene === "voice" ? "on" : ""}`}>
+        <section className={`scene voicescene ${scene === "voice" ? "on" : ""}`}>
           {bot && (
             <>
               <span className="live"><i />Live voice test · Whisper (Groq) → {bot.stack.llm.split(":").slice(1).join(":")} → free voice</span>
-              <div className={`callctl ${live}`} ref={micEl}>
-                <button className={`micbtn ${live}`} aria-label={live === "off" ? "Start the call" : "End the call"} onClick={() => (live === "off" ? callStart() : callEnd())}>
-                  <I d={live === "off" ? IC.phone : IC.x} />
-                  {live !== "off" && <span className="endlbl">End</span>}
-                </button>
-                <div className="vstate" aria-live="polite">
-                  {live !== "off" && <span className="bars" aria-hidden><i /><i /><i /><i /><i /></span>}
-                  {{ off: "Start the call. The bot greets you, then just talk.", listening: "Listening", thinking: "Thinking", speaking: barge ? "Bot speaking · talk to cut in" : "Bot speaking" }[live]}
-                </div>
-              </div>
-              {live === "off" && (
+              {/* Voices on the left, the call in the middle, call behaviour on the right. */}
+              <div className="callrow">
                 <div className="vpick">
                   {[...new Set(bot.languages.map(srLang))].map((l) => <VoicePick key={l} lang={l as SpeakLang} />)}
                 </div>
-              )}
+                <div className={`callctl ${live}`} ref={micEl}>
+                  <button className={`micbtn ${live}`} aria-label={live === "off" ? "Start the call" : "End the call"} title={live === "off" ? "Start the call" : "End the call"}
+                    // Right after you click, the pointer is still on the button: show the call, not "hang up", until it leaves once.
+                    onClick={(e) => (e.currentTarget.dataset.fresh = "1", live === "off" ? callStart() : callEnd())}
+                    onMouseLeave={(e) => delete e.currentTarget.dataset.fresh}>
+                    {live === "off" ? <I d={IC.phone} /> : (
+                      <>
+                        <span className="bars" aria-hidden><i /><i /><i /><i /><i /></span>
+                        <span className="hang" aria-hidden><I d={IC.phone} /></span>
+                      </>
+                    )}
+                  </button>
+                  <div className="vstate" aria-live="polite">
+                    {{ off: "Start the call", listening: "Listening…", thinking: "Thinking…", speaking: "Bot speaking" }[live]}
+                  </div>
+                </div>
+                <div className="vopts">
+                  <button className={`switch ${barge ? "on" : ""}`} role="switch" aria-checked={barge} onClick={() => setBarge(!barge)}><i />Let me cut in</button>
+                  <small>{barge ? "Talk over the bot and it stops to listen." : "The bot always finishes its line."}</small>
+                </div>
+              </div>
               {live === "off" && !vlines.length && (
                 <p className="teach">
                   <b>How real calls go:</b> people pause, change their mind, and talk over the bot. Try it: start talking while the bot is
@@ -1251,15 +1266,15 @@ export default function Stage() {
                   )}
                 </div>
               )}
-              {timing && <div className="big sm"><b>{(timing.total / 1000).toFixed(2)} s</b><span>from the end of your sentence to the bot’s first sound (last turn)</span></div>}
+              {timing && <div className="big sm narrow"><b>{(timing.total / 1000).toFixed(2)} s</b><span>from the end of your sentence to the bot’s first sound (last turn)</span></div>}
               {timing && (
                 <>
-                  <div className="bar">
+                  <div className="bar narrow">
                     <span style={{ background: "var(--s2)", flexGrow: timing.hear }}>{(timing.hear / 1000).toFixed(2)}s</span>
                     <span style={{ background: "var(--s3)", flexGrow: timing.think }}>{(timing.think / 1000).toFixed(2)}s</span>
                     {timing.speak > 0 && <span style={{ background: "var(--s4)", flexGrow: timing.speak }}>{(timing.speak / 1000).toFixed(2)}s</span>}
                   </div>
-                  <div className="legend">
+                  <div className="legend narrow">
                     <span><i style={{ background: "var(--s2)" }} />Hearing · pause + Whisper</span>
                     <span><i style={{ background: "var(--s3)" }} />Thinking · Groq</span>
                     <span><i style={{ background: "var(--s4)" }} />First sound · {timing.left ?? "voice"}</span>
@@ -1298,6 +1313,7 @@ export default function Stage() {
         </section>
 
         </main>
+      <SidePanel scene={scene} bot={bot ?? null} sel={sel} lines={lines} vlines={vlines} timing={timing} undo={undo} draft={draft} />
       <div className={`vig ${vig}`} />
 
       <div className="mic">
@@ -1369,4 +1385,138 @@ function BotList({ on, open }: { on: boolean; open: (d: Draft) => void }) {
       ))}
     </div>
   );
+}
+
+// The right-hand panel: what this screen means at a glance, so the centre can stay focused.
+// It floats over the right gutter (like the running order on the left) and never moves the centre.
+type SideProps = {
+  scene: Scene; bot: Bot | null; sel: { kind: string; id?: string } | null; lines: Line[]; vlines: Line[];
+  timing: Timing | null; undo: Bot[]; draft: Draft | null;
+};
+function SidePanel({ scene, bot, sel, lines, vlines, timing, undo, draft }: SideProps) {
+  const body = (() => {
+    const u = draft?.interview?.understood;
+    if (scene === "questions" && u)
+      return (
+        <>
+          <h4>Understood so far</h4>
+          {u.goal && <p>{u.goal}</p>}
+          <ul className="ticks">
+            {u.languages.map((l) => <li key={l}>{langName(l)}</li>)}
+            {u.never.map((r) => <li key={r} className="bad">Never: {r}</li>)}
+            {u.always.map((r) => <li key={r}>Always: {r}</li>)}
+          </ul>
+          <p className="hint2">Answer every question in one breath. Anything you skip, the bot will ask you later.</p>
+        </>
+      );
+    if (!bot) return null;
+    const step = sel?.kind === "step" ? bot.flow.steps.find((x) => x.id === sel.id) : undefined;
+    const no = (id: string) => bot.flow.steps.findIndex((x) => x.id === id) + 1;
+    if (scene === "blueprint" && step)
+      return (
+        <>
+          <h4>Step {no(step.id)} · {step.label}</h4>
+          <blockquote>“{step.says}”</blockquote>
+          <ul className="links">
+            {bot.flow.links.filter((l) => l.from === step.id).map((l) => (
+              <li key={l.to}><span>{l.when === "always" ? "then" : `if ${l.when}`}</span> → {no(l.to)} {bot.flow.steps.find((x) => x.id === l.to)?.label}</li>
+            ))}
+          </ul>
+          <p className="hint2">Now say the change, e.g. “make this shorter”.</p>
+        </>
+      );
+    if (scene === "blueprint")
+      return (
+        <>
+          <h4>Reading the flow</h4>
+          <ul className="legend2">
+            <li><i className="lg-box" />A step: what the bot says</li>
+            <li><i className="lg-end" />An end of the call</li>
+            <li><i className="lg-chg" />Just changed by you</li>
+          </ul>
+          <p className="stat"><b>{bot.flow.steps.length}</b> steps · <b>{bot.flow.links.filter((l) => l.when !== "always").length}</b> choices</p>
+          <p className="hint2">Click a step to see its line here. Double-click to pick several.</p>
+        </>
+      );
+    if (scene === "rules") {
+      const n = (k: string) => bot.rules.filter((r) => r.kind === k).length;
+      return (
+        <>
+          <h4>Rules at a glance</h4>
+          <p className="stat"><b>{n("never")}</b> never · <b>{n("always")}</b> always</p>
+          <p>{bot.rules.filter((r) => r.suggested).length} suggested by Rehearse: say “keep” or “drop”.</p>
+          <p className="hint2">Every reply in a rehearsal is checked against these.</p>
+        </>
+      );
+    }
+    if (scene === "knowledge")
+      return (
+        <>
+          <h4>Why facts</h4>
+          <p>The bot may only state what is here. It never invents prices, dates or features.</p>
+          <p className="hint2">Say “add: the trial is 14 days”.</p>
+        </>
+      );
+    if (scene === "prompt")
+      return (
+        <>
+          <h4>Built from</h4>
+          <ul className="ticks">
+            <li>{bot.flow.steps.length} steps</li><li>{bot.rules.length} rules</li><li>{bot.knowledge.length} facts</li>
+          </ul>
+          <p className="stat"><b>{bot.prompt.split(/\s+/).length}</b> words</p>
+          <p className="hint2">You never edit this by hand. Change the flow, rules or facts and it rewrites itself.</p>
+        </>
+      );
+    if (scene === "call" || scene === "fix") {
+      const broken = new Set(lines.flatMap((l) => l.broken?.map((b) => b.rule_id) ?? []));
+      const replies = lines.filter((l) => l.role === "bot").length;
+      return (
+        <>
+          <h4>Rules on this call</h4>
+          <ul className="rulecheck">
+            {bot.rules.map((r, i) => (
+              <li key={r.id} className={broken.has(r.id) ? "bad" : replies > 1 ? "ok" : ""}>
+                <i>{broken.has(r.id) ? "✗" : replies > 1 ? "✓" : "·"}</i>{i + 1}. {r.text}
+              </li>
+            ))}
+          </ul>
+          <p className="hint2">{replies} bot {replies === 1 ? "line" : "lines"} checked. Try a tricky caller to test the rest.</p>
+          {undo.length > 0 && <p className="stat">Version <b>v{bot.version}</b> · say “undo” to go back</p>}
+        </>
+      );
+    }
+    if (scene === "voice")
+      return timing ? (
+        <>
+          <h4>Last reply speed</h4>
+          <p className="bignum">{(timing.total / 1000).toFixed(2)}<small> s</small></p>
+          <p className="hint2">From the end of your sentence to the bot’s first sound.</p>
+          <ul className="split">
+            <li><i style={{ background: "var(--s2)" }} />Hearing<span>{(timing.hear / 1000).toFixed(2)} s</span></li>
+            <li><i style={{ background: "var(--s3)" }} />Thinking<span>{(timing.think / 1000).toFixed(2)} s</span></li>
+            <li><i style={{ background: "var(--s4)" }} />First sound<span>{(timing.speak / 1000).toFixed(2)} s</span></li>
+          </ul>
+          <p className="hint2">Hearing includes the short pause that tells it you finished. Your turns so far: {vlines.filter((l) => l.role === "caller").length}.</p>
+        </>
+      ) : (
+        <>
+          <h4>What this measures</h4>
+          <p>Talk to the bot like a real caller. After each reply you see how fast it answered.</p>
+          <p className="hint2">Under about 1.5 s feels natural on a phone.</p>
+        </>
+      );
+    if (scene === "export")
+      return (
+        <>
+          <h4>In every export</h4>
+          <ul className="ticks">
+            <li>{bot.flow.steps.length} steps as instructions</li><li>{bot.rules.length} rules</li><li>{bot.knowledge.length} facts</li><li>The first line</li>
+          </ul>
+          <p className="hint2">Not included: phone numbers and voices. You choose those on the platform.</p>
+        </>
+      );
+    return null;
+  })();
+  return body ? <aside className="side" key={scene}>{body}</aside> : null;
 }
