@@ -248,3 +248,18 @@ body::before{content:"";position:fixed;inset:-20%;z-index:-1;pointer-events:none
 .journey .jt{white-space:nowrap;overflow:hidden}
 .n .t{font-size:14.5px}
 @media (min-width:1100px) and (max-width:1399px){.scene{padding-inline:76px}}
+/* live voice test: one button starts the call; the ring follows your voice */
+.micbtn{position:relative;transition:background .3s,transform .2s}
+.micbtn::after{content:"";position:absolute;inset:-6px;border-radius:50%;border:3px solid var(--accent);opacity:0;transform:scale(calc(1 + var(--lv,0) * .35));transition:transform .08s,opacity .3s}
+.micbtn.listening{background:var(--bad)} .micbtn.listening::after{opacity:.55;border-color:var(--bad)}
+.micbtn.thinking{background:var(--ink);color:var(--bg);animation:blink 1s infinite}
+.micbtn.speaking{background:var(--s4)} .micbtn.speaking::after{opacity:.5;border-color:var(--s4);animation:halo 1.2s ease-out infinite}
+.micbtn.rec{animation:none}
+.convo{display:flex;flex-direction:column;gap:10px;width:min(760px,100%);margin:8px 0}
+.convo .sub{text-align:left;max-width:80%} .convo .sub.me{align-self:flex-end;text-align:right}
+.convo .sub p{font-size:clamp(16px,1.6vw,20px)}
+.big.sm b{font-size:clamp(40px,5vw,60px)}
+.bar span{min-width:58px;justify-content:center}
+.micbtn{flex:none;width:96px;height:96px;margin:12px 0 4px}
+.convo{margin:4px 0} .convo .sub small{margin-bottom:2px}
+.scene .big.sm{margin:4px 0 0} .big.sm b{font-size:clamp(34px,4vw,52px)}

@@ -103,6 +103,11 @@ async function audioReady() {
   return ctx;
 }
 
+/** Stop any reply that is playing. */
+export function stopSpeaking() {
+  stopAll();
+}
+
 function stopAll() {
   turn++;
   for (const s of sources) s.stop();
@@ -138,14 +143,15 @@ async function kittenSay(text: string, t0: number) {
   let at = play(ac, wave, 0);
   const firstSoundMs = performance.now() - t0;
   // The rest is made while the first piece plays. ponytail: a failure mid-reply just ends the audio early.
-  void (async () => {
+  const done = (async () => {
     for (const part of rest) {
       const next = await say(part);
       if (my !== turn) return;
       at = play(ac, next, at);
     }
+    while (my === turn && ac.currentTime < at) await new Promise((r) => setTimeout(r, 50));
   })().catch(() => {});
-  return { firstSoundMs, engine: "KittenTTS nano 0.8 (in browser)" };
+  return { firstSoundMs, engine: "KittenTTS nano 0.8 (in browser)", done };
 }
 
 function browserVoices(): Promise<SpeechSynthesisVoice[]> {
@@ -174,25 +180,31 @@ function pickVoice(all: SpeechSynthesisVoice[], lang: SpeakLang) {
 async function browserSay(text: string, lang: SpeakLang, t0: number) {
   if (typeof speechSynthesis === "undefined") throw new Error("This browser has no built-in voice.");
   const voice = pickVoice(await browserVoices(), lang);
-  return new Promise<{ firstSoundMs: number; engine: string }>((ok, fail) => {
+  let finish = () => {};
+  const done = new Promise<void>((r) => (finish = r));
+  return new Promise<Spoken>((ok, fail) => {
     const u = new SpeechSynthesisUtterance(text);
+    u.onend = () => finish();
     u.lang = voice?.lang ?? lang;
     if (voice) u.voice = voice;
     const timer = setTimeout(() => fail(new Error("The browser voice did not start. Click the page once, then try again.")), 8000);
     u.onstart = () => {
       clearTimeout(timer);
-      ok({ firstSoundMs: performance.now() - t0, engine: `Browser voice (${voice?.name ?? lang})` });
+      ok({ firstSoundMs: performance.now() - t0, engine: `Browser voice (${voice?.name ?? lang})`, done });
     };
     u.onerror = (e) => {
       clearTimeout(timer);
+      finish();
       fail(new Error(`The browser voice failed (${e.error}).`));
     };
     speechSynthesis.speak(u);
   });
 }
 
-/** Speak a reply. Resolves when the first sound starts playing (time it with firstSoundMs). */
-export async function speak(text: string, lang: SpeakLang): Promise<{ firstSoundMs: number; engine: string }> {
+type Spoken = { firstSoundMs: number; engine: string; done: Promise<void> };
+
+/** Speak a reply. Resolves when the first sound starts playing (time it with firstSoundMs); `done` resolves when it ends. */
+export async function speak(text: string, lang: SpeakLang): Promise<Spoken> {
   const t0 = performance.now();
   stopAll();
   const clean = text.replace(/\p{Extended_Pictographic}/gu, "").replace(/\s+/g, " ").trim();
