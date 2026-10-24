@@ -35,7 +35,7 @@ const PROVIDERS = [
     name: "openrouter",
     url: "https://openrouter.ai/api/v1/chat/completions",
     key: () => process.env.OPENROUTER_API_KEY,
-    model: () => "nvidia/nemotron-3-super-120b-a12b:free",
+    model: () => "google/gemma-4-26b-a4b-it:free",
     extra: {},
   },
 ];
@@ -72,6 +72,12 @@ export async function askJSON<T extends z.ZodType>(
         });
         if (!res.ok) {
           errs.push(`${p.name} answered ${res.status}`);
+          // Free tiers limit tokens per minute: a short wait is faster than a weaker model.
+          const wait = Number(res.headers.get("retry-after"));
+          if (res.status === 429 && attempt === 0 && wait > 0 && wait <= 4) {
+            await new Promise((r) => setTimeout(r, wait * 1000));
+            continue;
+          }
           break; // rate limit or outage: go to the next provider
         }
         const body = await res.json();

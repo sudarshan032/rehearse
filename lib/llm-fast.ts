@@ -44,6 +44,12 @@ export async function chatJSON<T extends z.ZodType>(messages: Msg[], schema: T):
         });
         if (!res.ok) {
           errs.push(`${p.name} answered ${res.status}`);
+          // Free tiers limit tokens per minute: a short wait is faster than a weaker model.
+          const wait = Number(res.headers.get("retry-after"));
+          if (res.status === 429 && attempt === 0 && wait > 0 && wait <= 4) {
+            await new Promise((r) => setTimeout(r, wait * 1000));
+            continue;
+          }
           if (res.status === 400) continue; // Groq says 400 when the model's JSON was bad: try once more
           break;
         }
