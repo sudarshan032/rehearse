@@ -191,6 +191,19 @@ export default function Stage() {
   const convoEl = useRef<HTMLDivElement>(null);
   const raf = useRef(0);
   const micEl = useRef<HTMLDivElement>(null);
+  const micBox = useRef<HTMLDivElement>(null);
+  const mainEl = useRef<HTMLElement>(null);
+  // "More below": shown while the open screen has content under its bottom edge, so a cut-off line reads as "scroll", not as broken.
+  const [more, setMore] = useState(false);
+  // The screens end where the input block begins: it grows when the "heard" line wraps or the hints wrap,
+  // and nothing on a screen may slide under it.
+  useEffect(() => {
+    const el = micBox.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => document.documentElement.style.setProperty("--mic-h", `${Math.ceil(innerHeight - el.getBoundingClientRect().top) + 8}px`));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const [theme, setTheme] = useState("light");
   const inp = useRef<HTMLTextAreaElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -303,7 +316,12 @@ export default function Stage() {
   const subsEl = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = subsEl.current;
-    if (el) setTimeout(() => el.scrollTo({ top: el.scrollHeight, behavior: "smooth" }), 50);
+    // Show the newest line from its label down; if it is taller than the box (a red line with its stamp), its top wins.
+    if (el) setTimeout(() => {
+      const last = el.lastElementChild as HTMLElement | null;
+      const top = last ? Math.min(el.scrollHeight, last.offsetTop - el.offsetTop - 8) : el.scrollHeight;
+      el.scrollTo({ top: last && last.offsetHeight > el.clientHeight ? top : el.scrollHeight, behavior: "smooth" });
+    }, 50);
   }, [lines]);
 
   // Leaving the Voice test hangs up the call.
@@ -1175,6 +1193,20 @@ export default function Stage() {
 
   // ---------- render ----------
   const stepNo = (id?: string) => (bot && id ? bot.flow.steps.findIndex((s) => s.id === id) + 1 : 0);
+  useEffect(() => {
+    const m = mainEl.current;
+    if (!m) return;
+    const check = () => {
+      const el = m.querySelector<HTMLElement>(".scene.on");
+      setMore(!!el && el.scrollHeight - el.scrollTop - el.clientHeight > 12);
+    };
+    const t = setTimeout(check, 700); // after the screen's entrance
+    m.addEventListener("scroll", check, true);
+    addEventListener("resize", check);
+    const ro = new ResizeObserver(check);
+    m.querySelectorAll(".scene").forEach((x) => ro.observe(x));
+    return () => (clearTimeout(t), m.removeEventListener("scroll", check, true), removeEventListener("resize", check), ro.disconnect());
+  }, [scene, bot, lines.length, report]);
   const path = lines.filter((l) => l.role === "bot" && l.step_id).map((l) => l.step_id!);
   const lastBot = [...lines].reverse().find((l) => l.role === "bot");
   const badStep = lastBot?.broken?.length ? lastBot.step_id : undefined;
@@ -1224,7 +1256,7 @@ export default function Stage() {
         <div className="jh">Say “next”, “back” or “go to rules”.</div>
       </nav>
 
-      <main>
+      <main ref={mainEl}>
         <section className={`scene hero ${scene === "describe" ? "on" : ""}`}>
           <div className="herogrid">
             <div className="herotext">
@@ -1306,6 +1338,7 @@ export default function Stage() {
                   <Flow bot={bot} chg={changed?.steps} sel={targets.filter((x) => x.kind === "step").map((x) => x.id!)} onPick={pickStep} />
                 </div>
               </div>
+              <p className="swipe">Swipe sideways to see the whole flow</p>
               <div className="chg">{changed && <span>{changed.summary}</span>}</div>
             </>
           )}
@@ -1393,7 +1426,8 @@ export default function Stage() {
                   </div>
                 ))}
               </div>
-              {(report || lastBot?.ended) && lines.length > 1 && <CallReport bot={bot} lines={lines} again={() => startCall("rehearse again", persona || undefined)} />}
+              {(report || lastBot?.ended) && lines.length > 1 && <CallReport bot={bot} lines={lines} again={() => startCall("rehearse again", persona || undefined)}
+                fix={() => { setReport(false); if (lastTurn.current) setBox("@Last reply "); inp.current?.focus(); say("", "Say the fix for that line, then “replay”."); }} />}
             </>
           )}
         </section>
@@ -1549,7 +1583,12 @@ export default function Stage() {
       <SidePanel scene={scene} bot={bot ?? null} sel={sel} lines={lines} vlines={vlines} timing={timing} undo={undo} draft={draft} />
       <div className={`vig ${vig}`} />
 
-      <div className="mic">
+      {more && (
+        <button className="more" onClick={() => { const el = document.querySelector<HTMLElement>(".scene.on"); el?.scrollBy({ top: el.clientHeight * 0.7, behavior: "smooth" }); }}>
+          More below <span aria-hidden>↓</span>
+        </button>
+      )}
+      <div className="mic" ref={micBox}>
         <div className={`cap ${heard ? "on" : ""} ${heard?.err ? "err" : ""}`}>
           {heard?.q && <><span className="hl">Heard</span><span className="lang">{langOf(heard.q)}</span><q>{heard.q}</q></>}
           {heard && <b className={heard.ans ? "ans" : ""}>{busy ? <span className="dots"><i /><i /><i /></span> : heard.res}</b>}
@@ -1638,7 +1677,7 @@ function Proof() {
         <div className="lh"><small>My old way · one real sales bot (EN/HI/TE)</small><b>~<Num v={3} ms={2400} wait={300} /> weeks</b></div>
         <div className="track">
           <i className="fill" />
-          <div className="ticks" aria-hidden>{Array.from({ length: 87 }, (_, i) => <i key={i} style={{ ["--i" as string]: i }} />)}</div>
+          <div className="pticks" aria-hidden>{Array.from({ length: 87 }, (_, i) => <i key={i} style={{ ["--i" as string]: i }} />)}</div>
         </div>
         <div className="axis"><span>2 Oct · first version live</span><span><Num v={87} ms={2400} wait={300} /> prompt saves</span><span>24 Oct · stopped breaking rules</span></div>
         <p className="found">Found only after real calls:</p>
@@ -1698,13 +1737,14 @@ type SideProps = {
   timing: Timing | null; undo: Bot[]; draft: Draft | null;
 };
 // After a rehearsal: where the call went, what broke, what got fixed, and where to push next.
-function CallReport({ bot, lines, again }: { bot: Bot; lines: Line[]; again: () => void }) {
+function CallReport({ bot, lines, again, fix }: { bot: Bot; lines: Line[]; again: () => void; fix: () => void }) {
   const seen = new Set(lines.flatMap((l) => (l.role === "bot" && l.step_id ? [l.step_id] : [])));
   const broke = [...new Set(lines.flatMap((l) => l.broken?.map((b) => b.rule_id) ?? []))];
   const no = (id: string) => bot.rules.findIndex((r) => r.id === id) + 1;
   const fixed = lines.filter((l) => l.fixed).length;
   const left = bot.flow.steps.filter((s) => !seen.has(s.id));
   const replies = lines.filter((l) => l.role === "bot").length;
+  const badLine = [...lines].reverse().find((l) => l.broken?.length && !l.fixed)?.text;
   return (
     <div className="report">
       <div className="rhead"><h4>Call report</h4><button className="btn ghost" onClick={again}>Rehearse again</button></div>
@@ -1714,7 +1754,9 @@ function CallReport({ bot, lines, again }: { bot: Bot; lines: Line[]; again: () 
         <p><b><Num v={fixed} /></b><span>{fixed === 1 ? "fix replayed" : "fixes replayed"}</span></p>
         <p><b><Num v={replies} /></b><span>bot lines checked</span></p>
       </div>
-      {broke.length > 0 && <p>Broke {broke.map((id) => `rule ${no(id)} (${bot.rules.find((r) => r.id === id)?.text})`).join(", ")}.{fixed ? "" : " Point at the red line and say the fix."}</p>}
+      {broke.length > 0 && <p>Broke {broke.map((id) => `rule ${no(id)} (${bot.rules.find((r) => r.id === id)?.text})`).join(", ")}.</p>}
+      {badLine && <blockquote className="rquote">“{badLine}”</blockquote>}
+      {badLine && <button className="btn" onClick={fix}>Fix this line</button>}
       {left.length > 0 && <p className="next">Not reached yet: {left.slice(0, 3).map((s) => s.label).join(", ")}{left.length > 3 ? ` and ${left.length - 3} more` : ""}. Try a caller who goes that way.</p>}
     </div>
   );
