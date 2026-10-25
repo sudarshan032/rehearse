@@ -292,7 +292,7 @@ body.listening .tries{opacity:0}
   .script{padding:20px} .said{font-size:16px;line-height:26px}
 }
 /* voice test conversation: scrolls itself, shows the word being spoken */
-.convo{max-height:34vh;overflow-y:auto;scrollbar-width:thin;padding:4px 6px;mask-image:linear-gradient(transparent,#000 24px)}
+.convo{max-height:34vh;overflow-y:auto;scrollbar-width:thin;padding:26px 6px 4px;mask-image:linear-gradient(transparent,#000 24px)}
 .convo .todo{color:var(--faint);transition:color .15s}
 .convo .live-line p{color:var(--muted);font-style:italic}
 .teach{max-width:560px;text-align:center;font-size:14px;line-height:1.6;color:var(--muted);margin-top:14px}
