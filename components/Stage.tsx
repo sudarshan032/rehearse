@@ -1531,6 +1531,7 @@ export default function Stage() {
         <section className={`scene ${scene === "bots" ? "on" : ""}`}>
           <div className="eyebrow">saved in this browser · no sign-in</div>
           <h2>My bots</h2>
+          {scene === "bots" && <Proof />}
           <BotList on={scene === "bots"} open={open} current={draft?.id} />
         </section>
 
@@ -1590,6 +1591,23 @@ function VoicePick({ lang }: { lang: SpeakLang }) {
         {v.list.map((n) => <option key={n}>{n}</option>)}
       </select>
     </label>
+  );
+}
+
+// Why this exists, with numbers: my old way (from my own work logs, see docs/results.md) next to this browser's own timings.
+function Proof() {
+  const fixed = listDrafts()
+    .filter((d) => d.id !== SAMPLE_ID && d.times?.start && d.times.fixed)
+    .map((d) => ({ name: d.bot?.name ?? "", min: (d.times!.fixed! - d.times!.start!) / 60000 }))
+    .sort((a, b) => a.min - b.min)[0];
+  return (
+    <div className="proof">
+      <div><small>My old way · real bots, Sep–Oct 2026</small><p><b>~3 weeks</b> and ~87 prompt saves until one sales bot stopped breaking rules. Every break was found after real calls.</p></div>
+      <div><small>With Rehearse · in this browser</small>
+        {fixed ? <p><b>{fixed.min < 1 ? "<1" : Math.round(fixed.min)} min</b> from the brief to a rule break caught and fixed ({fixed.name}).</p>
+          : <p>Build a bot, rehearse it, and fix the first broken rule: your time shows here. Say “copy my timings” for the table.</p>}
+      </div>
+    </div>
   );
 }
 

@@ -436,3 +436,10 @@ body.listening .tries{opacity:0}
 .report>p{margin:0 0 4px;font-size:13.5px} .report .next{color:var(--muted)}
 @media (max-width:700px){.report .rstats{grid-template-columns:repeat(2,1fr)}}
 .callscene.reported .minimap svg{max-height:190px !important}
+/* Before vs after, on My bots */
+.proof{display:grid;grid-template-columns:1fr 1fr;gap:12px;width:min(900px,100%);margin:0 0 18px}
+.proof>div{padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+.proof>div+div{border-color:color-mix(in oklab,var(--accent) 45%,var(--line))}
+.proof small{display:block;margin-bottom:6px;font:500 10.5px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.proof p{margin:0;font-size:14px;color:var(--muted)} .proof b{font:400 26px/1.1 var(--display);color:var(--ink);display:block;margin-bottom:4px}
+@media (max-width:700px){.proof{grid-template-columns:1fr}}
