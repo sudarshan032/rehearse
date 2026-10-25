@@ -166,6 +166,7 @@ export default function Stage() {
   const [undo, setUndo] = useState<Bot[]>([]);
   const [lines, setLines] = useState<Line[]>([]);
   const [persona, setPersona] = useState("");
+  const [report, setReport] = useState(false); // the rehearsal call was stopped: show its report
   const [fix, setFix] = useState<{ step?: string; rule?: string; before: string; summary: string } | null>(null);
   const [vig, setVig] = useState("");
   const [counting, setCounting] = useState(false);
@@ -537,6 +538,7 @@ export default function Stage() {
     clearSample();
     lastTurn.current = "";
     setPersona(who ?? "");
+    setReport(false);
     setLines([]);
     setVig("");
     setFix(null);
@@ -552,6 +554,7 @@ export default function Stage() {
     clearSample();
     const history = base.slice(-20).map(({ role, text, step_id }) => ({ role, text, step_id }));
     const mine: Line[] = [...base, { role: "caller", text: t }];
+    setReport(false);
     setLines(mine);
     setVig("");
     const r = await run("Bot is thinking", () =>
@@ -921,7 +924,7 @@ export default function Stage() {
     if (scene === "voice" && /^(turn on|allow|enable|let me) (the )?(interruptions?|interrupt|cut in|cutting in)$/.test(low)) return setBarge(true), say(t, "Interruptions on: talk over the bot to cut in");
     if (scene === "voice" && /^(start|begin|ring|make)( the| a)? call$|^(start|call me|call)$/i.test(low)) return void callStart();
     if (/^(stop|end|hang up|cut)( the)? call[.!]?$|^hang up[.!]?$/i.test(t))
-      return scene === "call" || scene === "fix" ? (clearSample(), stopSpeaking(), go("blueprint"), say(t, "Call stopped")) : say(t, "No call is running right now.");
+      return scene === "call" || scene === "fix" ? (clearSample(), stopSpeaking(), go("call"), setReport(true), say(t, "Call stopped. Here is how it went.")) : say(t, "No call is running right now.");
     // For docs/results.md: a table of every own bot's measured times, ready to paste.
     if (/^copy (my |the )?(timings|times|results|numbers)$/.test(low)) {
       const min = (a?: number, b?: number) => (a && b ? `${((b - a) / 60000).toFixed(1)}` : "–");
@@ -1173,7 +1176,7 @@ export default function Stage() {
   const progIdx = PROGRESS.findIndex(([, s]) => s === (scene === "building" ? "questions" : ["rules", "knowledge", "prompt", "stack"].includes(scene) ? "blueprint" : scene));
   const reach = (s: Scene) => s === "describe" || (s === "questions" ? !!draft?.interview : !!bot);
   const u = draft?.interview?.understood;
-  const hints = scene === "voice" && live !== "off" ? ["end the call", barge ? "turn off interruptions" : "let me interrupt"] : scene === "call" && sel ? ["if they ask for a refund, offer a manager callback instead", "replay", "stop the call"] : HINTS[scene];
+  const hints = scene === "voice" && live !== "off" ? ["end the call", barge ? "turn off interruptions" : "let me interrupt"] : scene === "call" && report ? ["rehearse again", "back to the flow"] : scene === "call" && sel ? ["if they ask for a refund, offer a manager callback instead", "replay", "stop the call"] : HINTS[scene];
 
   return (
     <>
@@ -1230,8 +1233,13 @@ export default function Stage() {
               <p className="sub0">Say what the bot should do, in English, हिंदी, తెలుగు or a mix. Then rehearse a call, catch the line that breaks a rule, and fix it by saying so.</p>
               <div className="ctas">
                 <button className="btn" onClick={() => watchSample("watch a bot break a rule")}>Watch a bot break a rule</button>
-                <span>or just start talking below</span>
+                <span>or hold your Wispr Flow key and talk</span>
               </div>
+              <ol className="jobs" aria-label="Three jobs for your voice, one box">
+                <li><span><b>Describe</b><i> the bot, the way you’d explain it to a new hire</i></span></li>
+                <li><span><b>Play the caller</b><i> and hear where the bot slips</i></span></li>
+                <li><span><b>Say the fix</b><i> right at the line that broke a rule</i></span></li>
+              </ol>
             </div>
             {/* The intro: messy speech on a script page, the filler gets crossed out, a clean bot comes out. */}
             <div className="script" aria-hidden key={ix}>
@@ -1354,7 +1362,7 @@ export default function Stage() {
                 <div className="stk">
                   <div><small>Hears</small><b>Whisper large v3 turbo</b><span>Groq free tier · Telugu, Hindi, English</span></div>
                   <div><small>Thinks</small><b>{bot.stack.llm.split(":").slice(1).join(":")}</b><span>{bot.stack.llm.split(":")[0]} free tier</span></div>
-                  <div><small>Speaks</small><b>Browser voices</b><span>free · your device's English, Hindi and Telugu voices</span></div>
+                  <div><small>Speaks</small><b>Browser voices</b><span>free · your device’s English, Hindi and Telugu voices</span></div>
                 </div>
                 <p className="note">{timing ? `Last voice test: ${(timing.total / 1000).toFixed(2)} s to the first sound.` : "Real reply times show here after a voice test. Say “voice test”. For production, the same bot runs on Deepgram nova-3 and Murf Falcon with your own keys."}</p>
               </div>
@@ -1362,7 +1370,7 @@ export default function Stage() {
           )}
         </section>
 
-        <section className={`scene callscene ${scene === "call" ? "on" : ""}`}>
+        <section className={`scene callscene ${scene === "call" ? "on" : ""} ${report || lastBot?.ended ? "reported" : ""}`}>
           {bot && (
             <>
               <span className="persona"><I d={IC.target} />You are the caller{persona ? ` · ${persona}` : ""} · {talk ? "bot speaks out loud · say “mute”" : "say “speak the replies” to hear the bot"}</span>
@@ -1380,6 +1388,7 @@ export default function Stage() {
                   </div>
                 ))}
               </div>
+              {(report || lastBot?.ended) && lines.length > 1 && <CallReport bot={bot} lines={lines} again={() => startCall("rehearse again", persona || undefined)} />}
             </>
           )}
         </section>
@@ -1620,6 +1629,29 @@ type SideProps = {
   scene: Scene; bot: Bot | null; sel: { kind: string; id?: string } | null; lines: Line[]; vlines: Line[];
   timing: Timing | null; undo: Bot[]; draft: Draft | null;
 };
+// After a rehearsal: where the call went, what broke, what got fixed, and where to push next.
+function CallReport({ bot, lines, again }: { bot: Bot; lines: Line[]; again: () => void }) {
+  const seen = new Set(lines.flatMap((l) => (l.role === "bot" && l.step_id ? [l.step_id] : [])));
+  const broke = [...new Set(lines.flatMap((l) => l.broken?.map((b) => b.rule_id) ?? []))];
+  const no = (id: string) => bot.rules.findIndex((r) => r.id === id) + 1;
+  const fixed = lines.filter((l) => l.fixed).length;
+  const left = bot.flow.steps.filter((s) => !seen.has(s.id));
+  const replies = lines.filter((l) => l.role === "bot").length;
+  return (
+    <div className="report">
+      <div className="rhead"><h4>Call report</h4><button className="btn ghost" onClick={again}>Rehearse again</button></div>
+      <div className="rstats">
+        <p><b>{seen.size}/{bot.flow.steps.length}</b><span>steps reached</span></p>
+        <p className={broke.length ? "bad" : ""}><b>{broke.length}</b><span>{broke.length === 1 ? "rule broken" : "rules broken"}</span></p>
+        <p><b>{fixed}</b><span>{fixed === 1 ? "fix replayed" : "fixes replayed"}</span></p>
+        <p><b>{replies}</b><span>bot lines checked</span></p>
+      </div>
+      {broke.length > 0 && <p>Broke {broke.map((id) => `rule ${no(id)} (${bot.rules.find((r) => r.id === id)?.text})`).join(", ")}.{fixed ? "" : " Point at the red line and say the fix."}</p>}
+      {left.length > 0 && <p className="next">Not reached yet: {left.slice(0, 3).map((s) => s.label).join(", ")}{left.length > 3 ? ` and ${left.length - 3} more` : ""}. Try a caller who goes that way.</p>}
+    </div>
+  );
+}
+
 function SidePanel({ scene, bot, sel, lines, vlines, timing, undo, draft }: SideProps) {
   const body = (() => {
     const u = draft?.interview?.understood;
