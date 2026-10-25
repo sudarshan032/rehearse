@@ -1,5 +1,5 @@
 "use client";
-import type { Bot, Interview } from "./bot";
+import { compilePrompt, type Bot, type Interview } from "./bot";
 
 export type Answer = { id: string; q: string; a: string };
 export type Change = { v: number; summary: string; before?: string; rule?: string; step?: string };
@@ -18,8 +18,17 @@ function all(): Record<string, Draft> {
   }
 }
 
-export const getDraft = (id: string): Draft | undefined => all()[id];
-export const listDrafts = () => Object.values(all()).filter((d) => d?.id && (d.bot || d.interview)).sort((a, b) => b.updated - a.updated);
+// The prompt is always compiled from the bot's fields, so a bot saved by an older version gets today's prompt rules.
+const fresh = (d: Draft | undefined): Draft | undefined => {
+  if (!d?.bot) return d;
+  try {
+    return { ...d, bot: { ...d.bot, prompt: compilePrompt(d.bot) } };
+  } catch {
+    return d;
+  }
+};
+export const getDraft = (id: string): Draft | undefined => fresh(all()[id]);
+export const listDrafts = () => Object.values(all()).filter((d) => d?.id && (d.bot || d.interview)).map((d) => fresh(d)!).sort((a, b) => b.updated - a.updated);
 
 /** Remove one of your own bots from this browser. */
 export function removeDraft(id: string) {

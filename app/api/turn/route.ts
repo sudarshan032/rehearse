@@ -56,7 +56,13 @@ export async function POST(req: Request) {
   const end = lines.at(-1);
   if (end?.role !== "caller") messages.push({ role: "user", content: lines.length ? CALLER_SILENT : CALL_START });
   else {
-    const lang = /[\u0C00-\u0C7F]/.test(end.text) ? "te" : /[\u0900-\u097F]/.test(end.text) ? "hi" : "";
+    // The script most of the line is written in (a stray word in another script doesn't switch the call).
+    const n = (re: RegExp) => end.text.match(re)?.length ?? 0;
+    const [te, hi, en] = [n(/[\u0C00-\u0C7F]/g), n(/[\u0900-\u097F]/g), n(/[a-z]/gi)];
+    // Both Indian scripts in one line is a mis-heard line: stay in the language the bot was already speaking.
+    const was = [...lines].reverse().find((l) => l.role === "bot")?.text ?? "";
+    const prev = /[\u0C00-\u0C7F]/.test(was) ? "te" : /[\u0900-\u097F]/.test(was) ? "hi" : "";
+    const lang = te && hi && prev ? prev : te > hi && te >= en ? "te" : hi > te && hi >= en ? "hi" : "";
     if (lang && bot.follow_caller_language && (!bot.languages.length || bot.languages.includes(lang)))
       messages[messages.length - 1].content += `\n\n${LANG_HINT[lang]}`;
   }

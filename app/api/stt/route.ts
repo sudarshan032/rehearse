@@ -25,11 +25,13 @@ export async function POST(req: Request) {
 
   const raw = req.headers.get("content-type")?.split(";")[0] ?? "";
   const type = raw.startsWith("audio/") ? raw : "audio/webm";
-  const langs = (new URL(req.url).searchParams.get("langs")?.split(",") ?? []).filter((l) => HINTS.has(l));
+  const q = new URL(req.url).searchParams;
+  const langs = (q.get("langs")?.split(",") ?? []).filter((l) => HINTS.has(l));
+  const lang = HINTS.has(q.get("lang") ?? "") ? q.get("lang")! : undefined; // the language the call is in now
 
   const t0 = Date.now();
   try {
-    const out = paid() ? await deepgram(key, audio, type, langs) : await groq(key, audio, type, langs);
+    const out = paid() ? await deepgram(key, audio, type, langs) : await groq(key, audio, type, langs, lang);
     if ("error" in out) return Response.json(out, { status: 502 });
     return Response.json({ ...out, ms: Date.now() - t0 });
   } catch {
@@ -37,17 +39,25 @@ export async function POST(req: Request) {
   }
 }
 
-async function groq(key: string, audio: ArrayBuffer, type: string, langs: string[]) {
+async function groq(key: string, audio: ArrayBuffer, type: string, langs: string[], lang?: string) {
+  // Pin Telugu/Hindi when the call is in it (or the bot speaks only that). Unpinned, Whisper hears Telugu as Tamil
+  // and writes it in the wrong script. English stays unpinned so a caller can switch.
+  const pin = lang === "te" || lang === "hi" ? lang : langs.length === 1 ? langs[0] : undefined;
+  const out = await whisper(key, audio, type, pin);
+  // Unpinned and it guessed a language this bot doesn't speak (Telugu usually comes back as "tamil"): hear it again as Telugu.
+  if (!pin && "raw" in out && !["english", "hindi"].includes(out.raw ?? "") && langs.includes("te")) return whisper(key, audio, type, "te");
+  return out;
+}
+
+async function whisper(key: string, audio: ArrayBuffer, type: string, pin?: string) {
   const form = new FormData();
   form.append("file", new Blob([audio], { type }), `turn.${EXT[type] ?? "webm"}`);
   form.append("model", "whisper-large-v3-turbo");
   form.append("response_format", "verbose_json");
-  // Only pin the language when the bot speaks just one. Mixed bots let Whisper detect it.
-  if (langs.length === 1) form.append("language", langs[0]);
-  // A short code-mixed example keeps each word in its own script (English words stay English) and stops
-  // Whisper from translating the caller into another language.
-  const sample = [langs.includes("te") && "నా free plan లో limit అయిపోయింది.", langs.includes("hi") && "मुझे refund चाहिए, please.", "Is the Pro trial really free?"].filter(Boolean).join(" ");
-  form.append("prompt", sample);
+  if (pin) form.append("language", pin);
+  // One example line in the call's language only: an example in a second script leaks that script into the text.
+  const SAMPLE: Record<string, string> = { te: "నా ఫ్రీ ప్లాన్ లో లిమిట్ అయిపోయింది.", hi: "मेरा फ्री प्लान का लिमिट खत्म हो गया।", en: "Is the Pro trial really free?" };
+  form.append("prompt", SAMPLE[pin ?? "en"] ?? SAMPLE.en);
   form.append("temperature", "0");
   const res = await fetch(GROQ_URL, {
     method: "POST",
@@ -61,7 +71,8 @@ async function groq(key: string, audio: ArrayBuffer, type: string, langs: string
   const text = String(j?.text ?? "").trim();
   // Whisper invents these on silence or noise: treat them as "heard nothing".
   const ghost = /^(thank you\.?|thanks for watching!?|you\.?|bye\.?|\.+)$/i.test(text);
-  return { text: ghost ? "" : text, lang: WHISPER_LANG[String(j?.language ?? "").toLowerCase()] };
+  const raw = String(j?.language ?? "").toLowerCase();
+  return { text: ghost ? "" : text, lang: WHISPER_LANG[raw] ?? pin, raw };
 }
 
 async function deepgram(key: string, audio: ArrayBuffer, type: string, langs: string[]) {

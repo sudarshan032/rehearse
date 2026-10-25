@@ -8,7 +8,7 @@ import { SAMPLE_BOT, SAMPLE_BRIEF, SAMPLE_CALL, SAMPLE_ID, sampleFix, sampleRepl
 import { pickVoiceName, preloadVoice, speak, stopSpeaking, voicesFor, type SpeakLang } from "@/lib/speak";
 import { Flow } from "./Flow";
 
-type Scene = "describe" | "questions" | "building" | "blueprint" | "rules" | "knowledge" | "prompt" | "stack" | "call" | "fix" | "voice" | "export" | "bots";
+type Scene = "describe" | "questions" | "building" | "blueprint" | "rules" | "knowledge" | "prompt" | "stack" | "call" | "fix" | "voice" | "export" | "bots" | "proof";
 type Broken = { rule_id: string; quote: string; why: string };
 type Line = { role: "caller" | "bot"; text: string; step_id?: string; broken?: Broken[]; ended?: boolean; fixed?: boolean; cut?: number; unchecked?: boolean };
 type SRClass = new () => {
@@ -47,7 +47,7 @@ type Timing = { hear: number; think: number; speak: number; total: number; left?
 const PROGRESS: [string, Scene][] = [["Describe", "describe"], ["Questions", "questions"], ["Blueprint", "blueprint"], ["Rehearse", "call"], ["Fix", "fix"], ["Voice test", "voice"], ["Export", "export"]];
 const SAY_STAGE: Record<Scene, SayStage> = {
   describe: "describe", questions: "interview", building: "interview", blueprint: "blueprint", rules: "blueprint", knowledge: "blueprint",
-  prompt: "blueprint", stack: "blueprint", call: "rehearse", fix: "rehearse", voice: "blueprint", export: "blueprint", bots: "describe",
+  prompt: "blueprint", stack: "blueprint", call: "rehearse", fix: "rehearse", voice: "blueprint", export: "blueprint", bots: "describe", proof: "describe",
 };
 const TAB_SCENE: Partial<Record<Tab, Scene>> = { flow: "blueprint", rules: "rules", knowledge: "knowledge", prompt: "prompt", stack: "stack", rehearse: "call", voice: "voice", export: "export", bots: "bots", home: "describe" };
 const HINTS: Record<Scene, string[]> = {
@@ -64,6 +64,7 @@ const HINTS: Record<Scene, string[]> = {
   voice: ["start the call", "end the call", "back to the flow"],
   export: ["copy the prompt", "download vapi", "start a new bot"],
   bots: ["start a new bot", "open the first one"],
+  proof: ["show me the sample", "my bots", "start a new bot"],
 };
 const PLACEHOLDER: Partial<Record<Scene, string>> = {
   describe: "Describe your bot…",
@@ -92,6 +93,7 @@ const JOURNEY: { s: Scene; name: string; sub?: boolean; re: RegExp }[] = [
   { s: "voice", name: "Voice test", re: /\bvoice( test)?\b/ },
   { s: "export", name: "Export", re: /\b(export|download)\b/ },
   { s: "bots", name: "My bots", re: /\b(my bots|all bots|bots)\b/ },
+  { s: "proof", name: "Proof", re: /\b(proof|results?|before and after)\b/ },
 ];
 const NEXT = /^(please |ok(ay)? |now |just )?((move|go) )?(forward|next|onward|ahead|on)( step| page| one)?$|^(continue|next step|move on|go ahead|proceed)$/;
 const PREV = /^(please |ok(ay)? |now |just )?((move|go|step) )?(back(ward)?|previous|before)( step| page| one)?$|^(wapas|venakki)$/;
@@ -324,7 +326,7 @@ export default function Stage() {
         setDraft(d);
         // Back to the same screen after a reload (screens that need a live call or fix fall back to the flow).
         const was = sessionStorage.getItem("rehearse:scene") as Scene | null;
-        const safe: Scene[] = ["blueprint", "rules", "knowledge", "prompt", "stack", "voice", "export", "bots"];
+        const safe: Scene[] = ["describe", "blueprint", "rules", "knowledge", "prompt", "stack", "voice", "export", "bots", "proof"];
         setScene(d.bot ? (was && safe.includes(was) ? was : "blueprint") : d.interview ? "questions" : "describe");
       }
     } catch {}
@@ -430,7 +432,7 @@ export default function Stage() {
   }
   function back() {
     // Skip screens that can't show anything now (no bot yet, or the build screen).
-    const ok = (s: Scene) => s !== "building" && (s === "describe" || s === "bots" || (s === "questions" ? !!draft?.interview : !!bot));
+    const ok = (s: Scene) => s !== "building" && (s === "describe" || s === "bots" || s === "proof" || (s === "questions" ? !!draft?.interview : !!bot));
     const rest = [...past];
     let p: Scene | undefined;
     while ((p = rest.pop()) && !ok(p));
@@ -790,18 +792,19 @@ export default function Stage() {
     if (!bot || call.current !== c) return;
     micEl.current?.style.setProperty("--lv", "0");
     try {
-      const res = await fetch(`/api/stt?langs=${bot.languages.join(",")}`, { method: "POST", headers: { "Content-Type": audio.type || "audio/webm" }, body: audio });
+      // The call's language is the one the bot last spoke: Whisper is pinned to it, and for Telugu/Hindi the
+      // browser's own recogniser (Google, free, much better there) listens in it too.
+      const callLang = c.lang.slice(0, 2);
+      const res = await fetch(`/api/stt?langs=${bot.languages.join(",")}&lang=${callLang}`, { method: "POST", headers: { "Content-Type": audio.type || "audio/webm" }, body: audio });
       const stt = await res.json();
       if (!res.ok) throw new Error(stt.error ?? "Could not hear that");
       if (call.current !== c) return;
-      // Whisper is weak at Telugu and Hindi; the browser's own recogniser (Google, free) is much better there.
-      // When Whisper says you spoke Telugu/Hindi and the recogniser was listening in that language, use its words.
+      // Whisper pinned to the call's language hears Telugu/Hindi well; the browser's recogniser fills in when it hears nothing.
       const sr = c.srText?.trim();
-      if ((stt.lang === "te" || stt.lang === "hi") && sr && c.lang === srLang(stt.lang)) stt.text = sr;
-      log("call-heard", { text: stt.text, whisper: sr && stt.text === sr ? "replaced" : "used", lang: stt.lang, ms: stt.ms, bytes: audio.size });
+      if (!stt.text?.trim() && sr) stt.text = sr;
+      log("call-heard", { text: stt.text, sr, call: callLang, lang: stt.lang, ms: stt.ms, bytes: audio.size });
       if (!stt.text?.trim()) return listen(c);
       const t1 = performance.now();
-      c.lang = srLang(langOf(stt.text).toLowerCase());
       c.history.push({ role: "caller", text: stt.text });
       setVlines([...c.history]);
       setInterim("");
@@ -823,6 +826,7 @@ export default function Stage() {
     const c = call.current;
     if (!c || !bot) return;
     c.history.push({ role: "bot", text, step_id, ended });
+    c.lang = ttsLang(text, bot); // the caller answers in the language the bot just used
     setVlines([...c.history]);
     spokenRef.current = 0;
     setSpoken(0);
@@ -991,6 +995,7 @@ export default function Stage() {
     if (s === "describe") return nav(t, "home");
     if (s === "questions" && !draft?.interview) return say(t, "No questions yet. Describe a bot first.", { err: true });
     if (s === "bots") return go("bots"), say(t, "My bots");
+    if (s === "proof") return go("proof"), say(t, "Proof: my old way next to Rehearse");
     if (s !== "questions" && !bot) return say(t, "Build the bot first", { err: true });
     if (s === "call") return lines.length ? (go("call"), say(t, "Back to the call")) : startCall(t);
     go(s);
@@ -998,7 +1003,7 @@ export default function Stage() {
   }
   function step(t: string, dir: 1 | -1) {
     // Same order as the panel: Flow → Rules → Facts → Prompt → Stack → Rehearse → (Fix) → Voice test → Export.
-    const order: string[] = JOURNEY.map((j) => j.s).filter((s) => s !== "bots");
+    const order: string[] = JOURNEY.map((j) => j.s).filter((s) => s !== "bots" && s !== "proof");
     const here = Math.max(0, order.indexOf(scene === "building" ? "questions" : scene));
     const to = order[Math.min(order.length - 1, Math.max(0, here + dir))] as Scene;
     if (to === scene) return say(t, "This is the last step");
@@ -1206,7 +1211,7 @@ export default function Stage() {
         <div className="jt">Running order<button onClick={() => setPanel(!panel)} aria-label={panel ? "Hide the path" : "Show the path"}>{panel ? "‹" : "›"}</button></div>
         {JOURNEY.map((j) => {
           const here = scene === j.s || (scene === "building" && j.s === "questions");
-          const ok = j.s === "describe" || j.s === "bots" || (j.s === "questions" ? !!draft?.interview : !!bot);
+          const ok = j.s === "describe" || j.s === "bots" || j.s === "proof" || (j.s === "questions" ? !!draft?.interview : !!bot);
           return (
             <button key={j.s} className={`${j.sub ? "sub" : ""} ${here ? "here" : ""}`} disabled={!ok} onClick={() => goTo("", j.s)}>
               <i />{j.name}
@@ -1528,10 +1533,21 @@ export default function Stage() {
           )}
         </section>
 
+        <section className={`scene proofscene ${scene === "proof" ? "on" : ""}`}>
+          <div className="eyebrow">real work · counts only, no client data</div>
+          <h2>Proof</h2>
+          {scene === "proof" && <Proof />}
+          <ul className="proofnotes">
+            <li><b>7</b> voice agents I built at work, <b>22</b> live bots in English, Hindi and Telugu</li>
+            <li><b>~61 h</b> of my hands-on time on them in 15 working days, <b>58</b> call recordings reviewed by hand</li>
+            <li>Breaks found only after calls: a demo booked without a yes, a wrong price in 6 of 9 calls, hanging up on “hmm”, Telugu replies mixing scripts</li>
+          </ul>
+          <p className="note">Measured from my own work history (dates, version counters, logs). Rehearse times are measured in this browser, not guessed.</p>
+        </section>
+
         <section className={`scene ${scene === "bots" ? "on" : ""}`}>
           <div className="eyebrow">saved in this browser · no sign-in</div>
           <h2>My bots</h2>
-          {scene === "bots" && <Proof />}
           <BotList on={scene === "bots"} open={open} current={draft?.id} />
         </section>
 

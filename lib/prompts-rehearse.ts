@@ -7,8 +7,8 @@ export const CALLER_SILENT = "(The caller says nothing.)";
 
 // Small fast models drift back to the language of the flow's example lines, so the newest caller line names its language.
 export const LANG_HINT: Record<string, string> = {
-  te: "(The caller is speaking Telugu. Reply in Telugu, in Telugu script. Keep English product words and prices in English.)",
-  hi: "(The caller is speaking Hindi. Reply in Hindi, in Devanagari script. Keep English product words and prices in English.)",
+  te: "(The caller is speaking Telugu. Reply in everyday spoken Telugu, in Telugu script, like talking to a shop owner on the phone. Use the English words people really say (ఫ్రీ ప్లాన్, వర్డ్ లిమిట్, ట్రయల్, లింక్, యాప్స్), written in Telugu letters, not bookish Telugu words: say ట్రై చేశారు, వాడారు, కావాలా, ఓకే నా, not ప్రయత్నించారు, ఉపయోగించారు, ఆసక్తి ఉందా. Brand names stay in English.)",
+  hi: "(The caller is speaking Hindi. Reply in everyday spoken Hindi, in Devanagari, the way people talk on the phone. Use the English words people really say (फ्री प्लान, वर्ड लिमिट, ट्रायल, लिंक, ऐप्स), written in Devanagari, not formal Hindi words: say ट्राई किया, यूज़ किया, चाहिए क्या, not प्रयास, उपयोग, साप्ताहिक, सीमा. Brand names stay in English.)",
 };
 
 export const CHECK_SYSTEM = `You check one reply of a phone voice agent against its rules, strictly, one rule at a time.

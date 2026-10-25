@@ -105,6 +105,22 @@ export function finishBot(draft: z.infer<typeof BotDraft>, id: string, llm: stri
 export const langName = (l: string) => LANGS[l]?.name ?? l;
 
 // The runtime prompt is always generated from the fields, never edited separately.
+// Small models translate the flow's English lines into bookish Telugu/Hindi that nobody says on a call.
+// What real callers hear instead: everyday words, with the English words people actually use, in the same script.
+const SPOKEN: Record<string, string> = {
+  te: `Telugu: everyday spoken Telugu, like talking to a shop owner on the phone. Use the English words people really say, written in Telugu letters (ఫ్రీ ప్లాన్, వర్డ్ లిమిట్, ట్రయల్, లింక్, యాప్స్, ట్రై చేయండి). Never bookish words.
+  Bad: "మీరు గత వారం ఫ్రీ ప్లాన్ ఉపయోగించారు. మీరు వారపు పదాల పరిమితిని చేరారా?" Good: "మీరు లాస్ట్ వీక్ ఫ్రీ ప్లాన్ వాడారు కదా. వర్డ్ లిమిట్ అయిపోయిందా?"
+  Bad: "14 రోజుల ఉచిత ట్రయల్ ప్రయత్నించాలనుకుంటున్నారా?" Good: "14 రోజులు ఫ్రీ ట్రయల్ ఉంది, ట్రై చేస్తారా?"`,
+  hi: `Hindi: everyday spoken Hindi, the way people talk on the phone. Use the English words people really say, written in Devanagari (फ्री प्लान, वर्ड लिमिट, ट्रायल, लिंक, ऐप्स). Never formal words.
+  Bad: "क्या आप साप्ताहिक शब्द सीमा तक पहुँच गए?" Good: "क्या आपकी वर्ड लिमिट खत्म हो गई?"
+  Bad: "आप 14 दिन का परीक्षण आज़मा सकते हैं।" Good: "14 दिन का फ्री ट्रायल है, ट्राई करेंगे?"
+  If your name is a woman's name, use feminine verbs: समझ गई, बता सकती हूँ, भेज देती हूँ.`,
+};
+const spoken = (langs: string[]) => {
+  const parts = langs.filter((l) => SPOKEN[l]).map((l) => SPOKEN[l]);
+  return parts.length ? `\nHow to speak (brand names like product names stay in English):\n${parts.join("\n")}` : "";
+};
+
 export function compilePrompt(b: Bot): string {
   const langs = b.languages.map(langName).join(", ");
   const out = (to: string) =>
@@ -137,7 +153,8 @@ Languages: ${langs}. ${
       ? "Always reply in the language the caller last used (Telugu, Hindi, English or a mix)."
       : `Always reply in ${langName(b.languages[0])}.`
   }
-Speak like a person on the phone: one or two short sentences, no lists, no markdown, no emojis. Keep English product words in English.
+Speak like a person on the phone: one or two short sentences, no lists, no markdown, no emojis.
+Numbers, prices and dates come only from the facts.${spoken(b.languages)}
 
 ## Call flow (follow it, one step at a time)
 ${steps}
