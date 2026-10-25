@@ -95,7 +95,7 @@ export function finishBot(draft: z.infer<typeof BotDraft>, id: string, llm: stri
     id,
     version,
     persona: { tone: draft.persona.tone, voice: { provider: "murf", lang: LANGS[lang].voice } },
-    stack: { stt: "groq:whisper-large-v3-turbo", llm, tts: "kittentts+browser" },
+    stack: { stt: "groq:whisper-large-v3-turbo", llm, tts: "browser" },
     prompt: "",
   };
   bot.prompt = compilePrompt(bot);

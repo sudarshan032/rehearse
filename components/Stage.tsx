@@ -1354,7 +1354,7 @@ export default function Stage() {
                 <div className="stk">
                   <div><small>Hears</small><b>Whisper large v3 turbo</b><span>Groq free tier · Telugu, Hindi, English</span></div>
                   <div><small>Thinks</small><b>{bot.stack.llm.split(":").slice(1).join(":")}</b><span>{bot.stack.llm.split(":")[0]} free tier</span></div>
-                  <div><small>Speaks</small><b>KittenTTS + browser voices</b><span>free · English in the browser, Hindi and Telugu by the system voice</span></div>
+                  <div><small>Speaks</small><b>Browser voices</b><span>free · your device's English, Hindi and Telugu voices</span></div>
                 </div>
                 <p className="note">{timing ? `Last voice test: ${(timing.total / 1000).toFixed(2)} s to the first sound.` : "Real reply times show here after a voice test. Say “voice test”. For production, the same bot runs on Deepgram nova-3 and Murf Falcon with your own keys."}</p>
               </div>
