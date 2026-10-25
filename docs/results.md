@@ -26,6 +26,9 @@ at the peak. Each one carries 9 to 16 "never/always" rules plus 36 company-wide 
 | Until it stopped breaking rules on calls | about 3 weeks (2 → 24 Oct), still getting Telugu fixes |
 | Prompt saves | about 87 (English v38, Telugu v30, Hindi v19) |
 | How breaks were found | real and team test calls (18 team test calls in one day; 31 scripted test scenarios; 58 recorded caller clips), then reading transcripts by hand |
+| My hands-on time on the platform (all bots) | about 61 active hours over 15 working days, 30 Sep → 23 Oct (from the timestamps of my work sessions; gaps over 30 min not counted) |
+| Where that time went | about 1 in 3 of my requests in those sessions were about test calls (a call dropped, a wrong reply, slow turns); the rest were pipeline, deploy and prompt changes |
+| Call recordings I reviewed by hand | 58 calls, 87 minutes of audio |
 | Rule breaks found only after calls happened | booked a demo without a clear yes; offered a slot that does not exist; wrong add-on price in 6 of 9 calls; hung up when the caller said only "hmm" / "ठीक है"; Telugu replies leaked other scripts; greeting reply dropped in 3 of 5 calls |
 
 ## Picked for the "after" test
