@@ -6,15 +6,15 @@ Most-usage prize use. Write the card's total each evening, and what I dictated t
 | Date | Card total (words) | Words today | Local history check | What I dictated (apps + what) |
 |---|---|---|---|---|
 | 23 Oct | [from card] | [card today − card yesterday] | 1,693 words in 15 dictations (Chrome, Terminal, Slack), first at 18:13 IST | Wispr set-up; first Flow; the planning brief for this session (Claude Code in Terminal) |
-| 24 Oct | ~4,300 (Siddhu read it from Insights) | | | Q&A answers for the planning session |
-| 25 Oct | | | | |
+| 24 Oct | ~4,300 (Siddhu read it from Insights, early in the day) | | 21,757 words in 205 dictations, longest 1,611 | Q&A for the plan; building Rehearse by voice in Claude Code (Terminal); testing the app in Chrome |
+| 25 Oct | | | 7,598 words in 76 dictations so far, longest 663 | UI and voice-call feedback, the before-numbers, the idea check (Terminal); app tests (Chrome) |
 | 26 Oct | | | | |
 | 27 Oct | | | | |
 | 28 Oct | | | | |
 | 29 Oct | | | | |
 | 30 Oct | | | | |
 
-Biggest single dictation (for the "How you used Wispr" field): [date, words, what]
+Biggest single dictation (for the "How you used Wispr" field): 24 Oct, 1,611 words, a build brief for Claude Code
 Still typed (honest): keyboard shortcuts, small code fixes, [anything else]
 
 ## Does Wispr Flow keep a local history on this Mac? Yes.
