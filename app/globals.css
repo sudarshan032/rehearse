@@ -191,7 +191,7 @@ main{position:fixed;top:64px;left:0;right:0;bottom:192px}
 .sub p{font:400 clamp(19px,2.2vw,26px)/1.45 var(--script);text-wrap:balance}
 .sub em{display:block;font:500 21px var(--pencil-font);color:var(--pencil);margin-top:6px;font-style:normal}
 .sub.me p{color:var(--accent)} .sub.bad p{color:var(--bad);text-decoration:underline wavy color-mix(in oklab,var(--pencil) 70%,transparent) 1.5px;text-underline-offset:6px}
-.subs .sub:not(:nth-last-child(-n+2)){display:none} .subs .sub:nth-last-child(2):not(:last-child){opacity:.4;transform:scale(.9)}
+.subs .sub:not(:nth-last-child(-n+2)){display:none} .subs .sub:nth-last-child(2):not(:last-child){transform:scale(.9)} .subs .sub:nth-last-child(2):not(:last-child) :is(p,em){opacity:.45}
 .stamp{display:inline-flex;gap:8px;align-items:center;margin-top:12px;font:700 22px var(--pencil-font);color:var(--pencil);border:2px solid var(--pencil);border-radius:40% 55% 45% 60%/60% 45% 55% 40%;padding:4px 18px;transform:rotate(-2deg);animation:stamp .55s cubic-bezier(.2,.9,.3,1.4) both}
 .stamp .ic{width:18px;height:18px}
 .stamp.okk{color:var(--ok);border-color:var(--ok)}
@@ -392,15 +392,14 @@ body.listening .tries{opacity:0}
 /* ---------- rehearse: fixed layout (nothing jumps), bigger flow, the whole call scrolls ---------- */
 .callscene{justify-content:flex-start;padding-top:14px;overflow:hidden}
 .callscene .minimap{width:min(980px,100%);margin:12px 0 6px;flex:none} .callscene .minimap svg{max-height:300px !important}
-.callscene .subs{flex:1 1 auto;min-height:0;overflow-y:auto;justify-content:flex-start;gap:14px;width:min(820px,100%);padding:6px 6px 10px;mask-image:linear-gradient(transparent,#000 22px)}
+.callscene .subs{flex:1 1 auto;min-height:0;overflow-y:auto;justify-content:flex-start;gap:14px;width:min(820px,100%);padding:26px 6px 10px;mask-image:linear-gradient(transparent,#000 22px)}
 .callscene .subs .sub{display:block!important;opacity:1!important;transform:none!important}
-.callscene .subs .sub:not(:last-child){opacity:.55!important}
 .callscene .subs .sub:not(:last-child) p{font-size:clamp(16px,1.6vw,19px)}
 .callscene .subs>:first-child{margin-top:auto}
 /* speaker labels: a clean small mono, not bold typewriter */
 .sub small{font:600 10.5px var(--mono);letter-spacing:.12em;color:var(--ink);opacity:1} /* same strength as the line it names */
 .sub.me small{color:var(--accent)}
-.callscene .subs .sub:not(:last-child){opacity:.75!important}
+.callscene .subs .sub:not(:last-child) :is(p,em){opacity:.75}
 /* flow: firmer lines and arrowheads */
 .e{stroke-width:1.9} .e.lit{stroke-width:2.8}
 .el{fill:var(--muted);font-size:12.5px}
