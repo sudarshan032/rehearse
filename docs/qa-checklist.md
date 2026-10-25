@@ -13,4 +13,4 @@ Run on a real laptop (Chrome), once in dark and once in light mode, then once at
 9. **Reload** on any screen: same bot, same screen.
 10. **My bots:** open, remove (two clicks), describe a new bot while one is open, "Back to it".
 
-If the free AI is busy (Groq 429), the app must say so and keep your words in the box. It must never claim "rules kept" when the rule check didn't run.
+If the free AI is busy (Groq 429), the app must say so and keep your words in the box. It must never claim "rules kept" when the rule check didn't run. The sample fix and "replay" still work with the AI off (saved answers).
