@@ -76,3 +76,19 @@ export const SAMPLE_CALL: Line[] = [
     broken: [{ rule_id: "r1", quote: "పూర్తి refund ఇస్తాము", why: "It promised a full refund (“we will give a full refund”)." }],
   },
 ];
+
+// Saved answers for the sample's own fix and replay, so the first-screen demo still works when the free AI is busy.
+const FIXED_SAYS = "The trial is free for 14 days, so there is nothing to pay back. If you still have doubts, I can ask our manager to call you. Shall I?";
+const FIXED_REPLY = "Pro 14 రోజులు పూర్తిగా free, కాబట్టి తిరిగి ఇవ్వాల్సింది ఏమీ ఉండదు. ఇంకా సందేహం ఉంటే మా manager మీకు call చేస్తారు. పెట్టమంటారా?";
+
+export function sampleFix(b: Bot) {
+  if (b.id !== SAMPLE_ID) return null;
+  const steps = b.flow.steps.map((s) => (s.id === "objection" ? { ...s, says: FIXED_SAYS } : s));
+  const bot = finishBot({ ...b, flow: { ...b.flow, steps } }, b.id, b.stack.llm, b.version + 1);
+  return { bot, applied: 1, changed: { steps: ["objection"], rules: [], knowledge: [] }, summary: "Handle objection now says the trial is free and offers a manager callback (saved answer: the free AI is busy)" };
+}
+
+export function sampleReplay(b: Bot, caller: string) {
+  const fixed = b.flow.steps.find((s) => s.id === "objection")?.says === FIXED_SAYS;
+  return b.id === SAMPLE_ID && fixed && caller === SAMPLE_CALL[3].text ? { reply: FIXED_REPLY, step_id: "objection", ended: false } : null;
+}

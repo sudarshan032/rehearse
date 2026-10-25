@@ -41,7 +41,9 @@ export function saveDraft(d: Draft) {
 export const newId = () => Math.random().toString(36).slice(2, 10);
 
 export async function post<T>(url: string, body: unknown): Promise<T> {
-  const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => {
+    throw new Error("Can't reach the server. Check your internet.");
+  });
   const json = await res.json().catch(() => ({ error: "No answer from the server." }));
   if (!res.ok) throw new Error(json.error ?? "Something went wrong.");
   return json;

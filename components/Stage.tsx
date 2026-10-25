@@ -4,7 +4,7 @@ import { langName, TOOL_SHELF, type Bot, type Interview } from "@/lib/bot";
 import { guessIntent, personaOf, type Stage as SayStage, type Tab } from "@/lib/say";
 import { getDraft, listDrafts, newId, post, removeDraft, saveDraft, type Change, type Draft } from "@/lib/store";
 import { EXPORTS } from "@/lib/export";
-import { SAMPLE_BOT, SAMPLE_BRIEF, SAMPLE_CALL, SAMPLE_ID } from "@/lib/sample";
+import { SAMPLE_BOT, SAMPLE_BRIEF, SAMPLE_CALL, SAMPLE_ID, sampleFix, sampleReplay } from "@/lib/sample";
 import { pickVoiceName, preloadVoice, speak, stopSpeaking, voicesFor, type SpeakLang } from "@/lib/speak";
 import { Flow } from "./Flow";
 
@@ -41,6 +41,7 @@ function toWav(parts: Float32Array[], rate: number) {
 const srLang = (l: string) => (l === "te" ? "te-IN" : l === "hi" ? "hi-IN" : "en-IN");
 type Target = { kind: "step" | "rule" | "knowledge" | "prompt" | "turn"; id?: string; text?: string; label: string };
 type EditResult = { bot: Bot; summary: string; changed: { steps: string[]; rules: string[]; knowledge: string[] }; applied: number };
+type SayRes = { intent: string; tab?: Tab; answer?: string; persona?: string } & Partial<EditResult>;
 type Timing = { hear: number; think: number; speak: number; total: number; left?: string };
 
 const PROGRESS: [string, Scene][] = [["Describe", "describe"], ["Questions", "questions"], ["Blueprint", "blueprint"], ["Rehearse", "call"], ["Fix", "fix"], ["Voice test", "voice"], ["Export", "export"]];
@@ -553,7 +554,9 @@ export default function Stage() {
     const mine: Line[] = [...base, { role: "caller", text: t }];
     setLines(mine);
     setVig("");
-    const r = await run("Bot is thinking", () => post<{ reply: string; step_id: string; ended: boolean }>("/api/turn", { bot: b, history, text: t }));
+    const r = await run("Bot is thinking", () =>
+      post<{ reply: string; step_id: string; ended: boolean }>("/api/turn", { bot: b, history, text: t }).catch((e) => sampleReplay(b, t) ?? Promise.reject(e)),
+    );
     if (!r) return null;
     const line: Line = { role: "bot", text: r.reply, step_id: r.step_id, ended: r.ended };
     setLines([...mine, line]);
@@ -962,9 +965,13 @@ export default function Stage() {
 
     say(t, "…");
     const r = await run(pointing ? "Changing it" : "Working it out", () =>
-      post<{ intent: string; tab?: Tab; answer?: string; persona?: string } & Partial<EditResult>>("/api/say", {
+      post<SayRes>("/api/say", {
         stage, bot, selection: sel ? { kind: sel.kind, id: sel.id, text: sel.text } : undefined,
         text: targets.length > 1 ? `(This is about: ${targets.map((x) => `${x.token.slice(1)} = ${x.label}`).join("; ")}) ${t}` : t,
+      }).catch((e) => {
+        // The sample's own fix still works when the free AI is busy.
+        const f = /refund|callback|call ?back|manager|free/i.test(t) && (sel?.kind === "turn" || scene === "call") ? sampleFix(bot) : null;
+        return f ? ({ intent: "edit", ...f } as SayRes) : Promise.reject(e);
       }),
     );
     if (!r) return;
