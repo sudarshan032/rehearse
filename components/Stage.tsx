@@ -1340,7 +1340,7 @@ export default function Stage() {
               <h2>What it knows</h2>
               <div className="facet">
                 {bot.knowledge.length ? (
-                  <ol>{bot.knowledge.map((k, i) => <li key={k.id} tabIndex={0} onKeyDown={(e) => e.key === "Enter" && attach(`@Fact ${i + 1}`, e.shiftKey)} className={changed?.knowledge.includes(k.id) ? "chg" : ""} onClick={(e) => attach(`@Fact ${i + 1}`, e.shiftKey || e.metaKey)} onDoubleClick={() => attach(`@Fact ${i + 1}`, true, true)}>{k.text}</li>)}</ol>
+                  <ol>{bot.knowledge.map((k, i) => <li key={k.id} style={{ ["--i" as string]: i }} tabIndex={0} onKeyDown={(e) => e.key === "Enter" && attach(`@Fact ${i + 1}`, e.shiftKey)} className={changed?.knowledge.includes(k.id) ? "chg" : ""} onClick={(e) => attach(`@Fact ${i + 1}`, e.shiftKey || e.metaKey)} onDoubleClick={() => attach(`@Fact ${i + 1}`, true, true)}>{k.text}</li>)}</ol>
                 ) : <p className="empty">No facts yet. Say your prices, plans or policies.</p>}
                 {bot.tools.some((t) => t.enabled) && <p className="note">Tools: {bot.tools.filter((t) => t.enabled).map((t) => TOOL_SHELF[t.id] ?? t.id).join(" · ")}</p>}
               </div>
@@ -1534,15 +1534,9 @@ export default function Stage() {
         </section>
 
         <section className={`scene proofscene ${scene === "proof" ? "on" : ""}`}>
-          <div className="eyebrow">real work · counts only, no client data</div>
+          <div className="eyebrow">from my own work logs · counts only, no client data</div>
           <h2>Proof</h2>
           {scene === "proof" && <Proof />}
-          <ul className="proofnotes">
-            <li><b>7</b> voice agents I built at work, <b>22</b> live bots in English, Hindi and Telugu</li>
-            <li><b>~61 h</b> of my hands-on time on them in 15 working days, <b>58</b> call recordings reviewed by hand</li>
-            <li>Breaks found only after calls: a demo booked without a yes, a wrong price in 6 of 9 calls, hanging up on “hmm”, Telugu replies mixing scripts</li>
-          </ul>
-          <p className="note">Measured from my own work history (dates, version counters, logs). Rehearse times are measured in this browser, not guessed.</p>
         </section>
 
         <section className={`scene ${scene === "bots" ? "on" : ""}`}>
@@ -1610,18 +1604,58 @@ function VoicePick({ lang }: { lang: SpeakLang }) {
   );
 }
 
-// Why this exists, with numbers: my old way (from my own work logs, see docs/results.md) next to this browser's own timings.
+// A number that counts up when it appears, so a stat reads as a result, not a label. Writes the DOM directly (no re-renders).
+function Num({ v, d = 0, ms = 1100, wait = 0 }: { v: number; d?: number; ms?: number; wait?: number }) {
+  const el = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    const out = el.current;
+    if (!out) return;
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return void (out.textContent = v.toFixed(d));
+    const t0 = performance.now() + wait;
+    let raf = 0;
+    const step = (t: number) => {
+      const k = Math.max(0, Math.min(1, (t - t0) / ms));
+      out.textContent = (v * (1 - (1 - k) ** 3)).toFixed(d);
+      if (k < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [v, d, ms, wait]);
+  return <span ref={el}>{(0).toFixed(d)}</span>;
+}
+
+// Why this exists: the same job on one timeline, my old way (from my own work logs, see docs/results.md)
+// against this browser's measured Rehearse time. The old bar fills slowly; the Rehearse bar barely starts.
+const BREAKS = ["Booked a demo without a clear yes", "Wrong add-on price in 6 of 9 calls", "Hung up when the caller said “hmm”", "Telugu replies mixed in other scripts"];
 function Proof() {
   const fixed = listDrafts()
     .filter((d) => d.id !== SAMPLE_ID && d.times?.start && d.times.fixed)
     .map((d) => ({ name: d.bot?.name ?? "", min: (d.times!.fixed! - d.times!.start!) / 60000 }))
     .sort((a, b) => a.min - b.min)[0];
   return (
-    <div className="proof">
-      <div><small>My old way · real bots, Sep–Oct 2026</small><p><b>~3 weeks</b> and ~87 prompt saves until one sales bot stopped breaking rules. Every break was found after real calls.</p></div>
-      <div><small>With Rehearse · in this browser</small>
-        {fixed ? <p><b>{fixed.min < 1 ? "<1" : Math.round(fixed.min)} min</b> from the brief to a rule break caught and fixed ({fixed.name}).</p>
-          : <p>Build a bot, rehearse it, and fix the first broken rule: your time shows here. Say “copy my timings” for the table.</p>}
+    <div className="race">
+      <div className="lane old">
+        <div className="lh"><small>My old way · one real sales bot (EN/HI/TE)</small><b>~<Num v={3} ms={2400} wait={300} /> weeks</b></div>
+        <div className="track">
+          <i className="fill" />
+          <div className="ticks" aria-hidden>{Array.from({ length: 87 }, (_, i) => <i key={i} style={{ ["--i" as string]: i }} />)}</div>
+        </div>
+        <div className="axis"><span>2 Oct · first version live</span><span><Num v={87} ms={2400} wait={300} /> prompt saves</span><span>24 Oct · stopped breaking rules</span></div>
+        <p className="found">Found only after real calls:</p>
+        <ul className="pins">{BREAKS.map((t, i) => <li key={t} style={{ ["--i" as string]: i }}>{t}</li>)}</ul>
+      </div>
+      <div className="lane new">
+        <div className="lh"><small>With Rehearse · measured in this browser</small><b>{fixed ? <><Num v={Math.max(1, Math.round(fixed.min))} ms={500} wait={2900} /> min</> : "minutes"}</b></div>
+        <div className="track"><i className="fill" /></div>
+        <ol className="steps4">
+          {["Describe it by voice", "Rehearse a call", "Rule break turns red", "Say the fix, replay"].map((t, i) => <li key={t} style={{ ["--i" as string]: i }}>{t}</li>)}
+        </ol>
+        <p className="found">{fixed ? `${fixed.name}: from the brief to a caught and fixed rule break, before any real caller.` : "Build a bot, rehearse it and fix the first broken rule: your measured time replaces “minutes”."}</p>
+      </div>
+      <div className="pstats">
+        {([[7, "voice agents built at work"], [22, "live bots, 3 languages"], [61, "hours of my hands-on time"], [58, "calls reviewed by hand"]] as const).map(([n, t], i) => (
+          <p key={t} style={{ ["--i" as string]: i }}><b><Num v={n} /></b><span>{t}</span></p>
+        ))}
       </div>
     </div>
   );
@@ -1675,10 +1709,10 @@ function CallReport({ bot, lines, again }: { bot: Bot; lines: Line[]; again: () 
     <div className="report">
       <div className="rhead"><h4>Call report</h4><button className="btn ghost" onClick={again}>Rehearse again</button></div>
       <div className="rstats">
-        <p><b>{seen.size}/{bot.flow.steps.length}</b><span>steps reached</span></p>
-        <p className={broke.length ? "bad" : ""}><b>{broke.length}</b><span>{broke.length === 1 ? "rule broken" : "rules broken"}</span></p>
-        <p><b>{fixed}</b><span>{fixed === 1 ? "fix replayed" : "fixes replayed"}</span></p>
-        <p><b>{replies}</b><span>bot lines checked</span></p>
+        <p><b><Num v={seen.size} />/{bot.flow.steps.length}</b><span>steps reached</span></p>
+        <p className={broke.length ? "bad" : ""}><b><Num v={broke.length} /></b><span>{broke.length === 1 ? "rule broken" : "rules broken"}</span></p>
+        <p><b><Num v={fixed} /></b><span>{fixed === 1 ? "fix replayed" : "fixes replayed"}</span></p>
+        <p><b><Num v={replies} /></b><span>bot lines checked</span></p>
       </div>
       {broke.length > 0 && <p>Broke {broke.map((id) => `rule ${no(id)} (${bot.rules.find((r) => r.id === id)?.text})`).join(", ")}.{fixed ? "" : " Point at the red line and say the fix."}</p>}
       {left.length > 0 && <p className="next">Not reached yet: {left.slice(0, 3).map((s) => s.label).join(", ")}{left.length > 3 ? ` and ${left.length - 3} more` : ""}. Try a caller who goes that way.</p>}
