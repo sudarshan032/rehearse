@@ -497,3 +497,5 @@ body.listening .tries{opacity:0}
 .more:hover{border-color:var(--accent);color:var(--accent)} .more span{animation:bounce 1.4s ease-in-out infinite}
 @media (max-height:760px){.bigq li{padding:11px 0} .scene h2{margin-bottom:10px}}
 @media (max-height:760px){.callscene .minimap{margin:6px 0 2px} .callscene .minimap svg{max-height:21vh !important} .callscene{padding-top:8px}}
+@media (max-width:700px){.tries .lbl{display:none} .callscene.reported .minimap{display:none}}
+.report>.btn{margin:2px 0 12px}
