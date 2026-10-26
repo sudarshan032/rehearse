@@ -43,6 +43,18 @@ async function groq(key: string, audio: ArrayBuffer, type: string, langs: string
   // Pin Telugu/Hindi when the call is in it (or the bot speaks only that). Unpinned, Whisper hears Telugu as Tamil
   // and writes it in the wrong script. English stays unpinned so a caller can switch.
   const pin = lang === "te" || lang === "hi" ? lang : langs.length === 1 ? langs[0] : undefined;
+  if (pin && langs.length > 1) {
+    // The caller can switch language mid-call, and pinned Whisper writes any other language as nonsense in the
+    // pinned script. So it also hears the turn unpinned, only to tell which language was spoken.
+    // ponytail: two Whisper calls per turn on the free tier; fine for a test call, drop to one if it rate-limits.
+    const [a, b] = await Promise.all([whisper(key, audio, type, pin), whisper(key, audio, type)]);
+    if (!("raw" in b)) return a;
+    const heard = b.raw === "english" ? "en" : b.raw === "hindi" ? "hi" : "te"; // Telugu comes back as "tamil" and others
+    if (heard === pin || !langs.includes(heard)) return "raw" in a ? a : b;
+    // One English-looking word ("Sorry." for a Telugu "సరే") is not enough to leave the call's language.
+    if (heard === "en") return (b.text ?? "").split(/\s+/).length > 1 ? b : a;
+    return whisper(key, audio, type, heard);
+  }
   const out = await whisper(key, audio, type, pin);
   // Unpinned and it guessed a language this bot doesn't speak (Telugu usually comes back as "tamil"): hear it again as Telugu.
   if (!pin && "raw" in out && !["english", "hindi"].includes(out.raw ?? "") && langs.includes("te")) return whisper(key, audio, type, "te");
@@ -56,7 +68,7 @@ async function whisper(key: string, audio: ArrayBuffer, type: string, pin?: stri
   form.append("response_format", "verbose_json");
   if (pin) form.append("language", pin);
   // One example line in the call's language only: an example in a second script leaks that script into the text.
-  const SAMPLE: Record<string, string> = { te: "నా ఫ్రీ ప్లాన్ లో లిమిట్ అయిపోయింది.", hi: "मेरा फ्री प्लान का लिमिट खत्म हो गया।", en: "Is the Pro trial really free?" };
+  const SAMPLE: Record<string, string> = { te: "సరే, నాకు ఇప్పుడు కొంచెం టైం ఉంది.", hi: "ठीक है, अभी मेरे पास थोड़ा टाइम है।", en: "Okay, I have a minute now." };
   form.append("prompt", SAMPLE[pin ?? "en"] ?? SAMPLE.en);
   form.append("temperature", "0");
   const res = await fetch(GROQ_URL, {

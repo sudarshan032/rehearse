@@ -90,7 +90,7 @@ const JOURNEY: { s: Scene; name: string; sub?: boolean; re: RegExp }[] = [
   { s: "stack", name: "Stack & speed", sub: true, re: /\b(stack|speed)\b/ },
   { s: "call", name: "Rehearse", re: /\b(rehears\w*|call|practice)\b/ },
   { s: "fix", name: "Changes", re: /\b(fix(es)?|changes|history|versions?)\b/ },
-  { s: "voice", name: "Voice test", re: /\bvoice( test)?\b/ },
+  { s: "voice", name: "Voice test", re: /\bvoice( te[sx]t)?\b/ },
   { s: "export", name: "Export", re: /\b(export|download)\b/ },
   { s: "bots", name: "My bots", re: /\b(my bots|all bots|bots)\b/ },
   { s: "proof", name: "Proof", re: /\b(proof|results?|before and after)\b/ },
@@ -976,6 +976,9 @@ export default function Stage() {
       if (m) return open(m), say(t, `Opened ${m.bot?.name ?? m.interview?.name}`);
     }
 
+    // On a live voice call the mic is the caller. Words typed or pasted (a Wispr key pressed by habit) must not edit the bot.
+    if (scene === "voice" && call.current) return say(t, "You're on a live call: just talk, the mic is listening. Say “end the call” to change the bot.", { err: true });
+
     const g = guessIntent(stage, t, pointing);
     if (g?.intent === "navigate" && g.tab && !onCall) return nav(t, g.tab);
     if (scene === "questions" && moreRe.test(t)) return askMore(t);
@@ -1489,7 +1492,7 @@ export default function Stage() {
         <section className={`scene voicescene ${scene === "voice" ? "on" : ""}`}>
           {bot && (
             <>
-              <span className="live"><i />Live voice test · Whisper (Groq) → {bot.stack.llm.split(":").slice(1).join(":")} → free voice</span>
+              <span className="live"><i /><span>Live voice test of <b>{bot.name}</b> v{bot.version}<em> · Whisper (Groq) → {bot.stack.llm.split(":").slice(1).join(":")} → free voice</em></span></span>
               {/* Voices on the left, the call in the middle, call behaviour on the right. */}
               <div className="callrow">
                 <div className="vpick">

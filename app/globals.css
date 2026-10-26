@@ -531,3 +531,5 @@ body.listening .tries{opacity:0}
   .empty2 ol{grid-template-columns:1fr}
   .more{display:none} .vopts{text-align:center}
 }
+.voicescene .live em{font-style:normal}
+@media (max-width:760px){.voicescene .live em{display:none}}

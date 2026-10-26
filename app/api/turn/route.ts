@@ -62,7 +62,8 @@ export async function POST(req: Request) {
     // Both Indian scripts in one line is a mis-heard line: stay in the language the bot was already speaking.
     const was = [...lines].reverse().find((l) => l.role === "bot")?.text ?? "";
     const prev = /[\u0C00-\u0C7F]/.test(was) ? "te" : /[\u0900-\u097F]/.test(was) ? "hi" : "";
-    const lang = te && hi && prev ? prev : te > hi && te >= en ? "te" : hi > te && hi >= en ? "hi" : "";
+    // A sound like "మ్.." (a heard "hmm") is too short to switch the call's language: it takes 3+ letters.
+    const lang = te && hi && prev ? prev : te >= 3 && te > hi && te >= en ? "te" : hi >= 3 && hi > te && hi >= en ? "hi" : "";
     if (lang && bot.follow_caller_language && (!bot.languages.length || bot.languages.includes(lang)))
       messages[messages.length - 1].content += `\n\n${LANG_HINT[lang]}`;
   }
