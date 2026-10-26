@@ -150,6 +150,7 @@ const IC = {
   dl: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
   moon: '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>',
+  path: '<path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/>',
   bots: '<rect x="4" y="7" width="16" height="12" rx="3"/><path d="M12 3v4M9 12h.01M15 12h.01"/>',
 };
 
@@ -904,7 +905,7 @@ export default function Stage() {
     const PANEL = "(the )?(left |side )?(panel|sidebar|side ?bar|running order)\\b";
     if (new RegExp(`^(please )?(hide|close|collapse|drop|remove|minimi[sz]e|fold|get rid of) ${PANEL}`).test(low)) return setPanel(false), say(t, "Panel hidden. Say “show the panel” to bring it back.");
     if (new RegExp(`^(please )?(show|open|bring back|expand|unhide) ${PANEL}`).test(low))
-      return setPanel(true), say(t, innerWidth < 1100 ? "The panel needs a wider window. Use “next”, “back” or “go to rules”." : "Panel shown");
+      return setPanel(true), say(t, "Panel shown");
     const theme = low.match(/^(switch to |turn on |go |use )?(the )?(dark|light) (mode|theme)\b/)?.slice(2);
     if (theme) return toggleTheme(theme[1] as "dark" | "light"), say(t, `${theme[1] === "dark" ? "Dark" : "Light"} mode`);
     // On a call, what you say is the caller talking ("go ahead", "continue", "fix it!"), unless it's a clear command.
@@ -1234,6 +1235,7 @@ export default function Stage() {
           <span className="stepname"><small>{progIdx + 1}/7</small>{PROGRESS[progIdx]?.[0]}</span>
         </div>
         <div className="topr">
+          <button className={`iconbtn pathbtn ${panel ? "on" : ""}`} onClick={() => setPanel(!panel)} aria-label={panel ? "Hide the running order" : "Show the running order"} aria-expanded={panel}><I d={IC.path} /></button>
           <button className="pillbtn" onClick={() => goTo("", "bots")}><I d={IC.bots} />My bots</button>
           <button className="iconbtn" onClick={() => toggleTheme()} aria-label="Switch light or dark"><I d={theme === "dark" ? IC.sun : IC.moon} /></button>
         </div>
@@ -1245,7 +1247,7 @@ export default function Stage() {
           const here = scene === j.s || (scene === "building" && j.s === "questions");
           const ok = j.s === "describe" || j.s === "bots" || j.s === "proof" || (j.s === "questions" ? !!draft?.interview : !!bot);
           return (
-            <button key={j.s} className={`${j.sub ? "sub" : ""} ${here ? "here" : ""}`} disabled={!ok} onClick={() => goTo("", j.s)}>
+            <button key={j.s} className={`${j.sub ? "sub" : ""} ${here ? "here" : ""}`} disabled={!ok} onClick={() => (goTo("", j.s), innerWidth < 1100 && setPanel(false))}>
               <i />{j.name}
               {bot && j.s === "rules" && <small>{bot.rules.length}</small>}
               {bot && j.s === "knowledge" && <small>{bot.knowledge.length}</small>}
@@ -1256,7 +1258,7 @@ export default function Stage() {
         <div className="jh">Say “next”, “back” or “go to rules”.</div>
       </nav>
 
-      <main ref={mainEl}>
+      <main ref={mainEl} onClick={() => panel && innerWidth < 1100 && setPanel(false)}>
         <section className={`scene hero ${scene === "describe" ? "on" : ""}`}>
           <div className="herogrid">
             <div className="herotext">
@@ -1338,7 +1340,6 @@ export default function Stage() {
                   <Flow bot={bot} chg={changed?.steps} sel={targets.filter((x) => x.kind === "step").map((x) => x.id!)} onPick={pickStep} />
                 </div>
               </div>
-              <p className="swipe">Swipe sideways to see the whole flow</p>
               <div className="chg">{changed && <span>{changed.summary}</span>}</div>
             </>
           )}
