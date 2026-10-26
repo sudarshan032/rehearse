@@ -1247,7 +1247,7 @@ export default function Stage() {
           const here = scene === j.s || (scene === "building" && j.s === "questions");
           const ok = j.s === "describe" || j.s === "bots" || j.s === "proof" || (j.s === "questions" ? !!draft?.interview : !!bot);
           return (
-            <button key={j.s} className={`${j.sub ? "sub" : ""} ${here ? "here" : ""}`} disabled={!ok} onClick={() => (goTo("", j.s), innerWidth < 1100 && setPanel(false))}>
+            <button key={j.s} className={`${j.sub ? "sub" : ""} ${here ? "here" : ""}`} disabled={!ok} title={ok ? undefined : "Describe a bot or open the sample first"} onClick={() => (goTo("", j.s), innerWidth < 1100 && setPanel(false))}>
               <i />{j.name}
               {bot && j.s === "rules" && <small>{bot.rules.length}</small>}
               {bot && j.s === "knowledge" && <small>{bot.knowledge.length}</small>}
@@ -1255,7 +1255,7 @@ export default function Stage() {
             </button>
           );
         })}
-        <div className="jh">Say “next”, “back” or “go to rules”.</div>
+        <div className="jh">{bot ? "Say “next”, “back” or “go to rules”." : "Describe a bot, or say “show me the sample”, to open the rest."}</div>
       </nav>
 
       <main ref={mainEl} onClick={() => panel && innerWidth < 1100 && setPanel(false)}>

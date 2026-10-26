@@ -72,10 +72,10 @@ h2{font:400 clamp(34px,4vw,54px)/1 var(--display);letter-spacing:-.015em;text-al
 .journey>button:not(.sub){counter-increment:cue}
 .journey>button i{flex:none;width:20px;font:500 12px var(--mono);font-style:normal;color:var(--faint)}
 .journey>button:not(.sub) i::before{content:counter(cue,decimal-leading-zero)}
-.journey>button.sub{padding-left:40px;font-size:14.5px;color:var(--muted)}
+.journey>button.sub{padding-left:40px;font-size:14.5px}
 .journey>button.sub i{display:none}
 .journey>button:hover:not(:disabled){background:var(--chip)}
-.journey>button:disabled{color:var(--faint);cursor:default} .journey>button.sub:disabled{color:var(--faint)}
+.journey>button:disabled{color:var(--muted);opacity:.42;cursor:not-allowed}
 .journey>button.here{background:var(--accent-soft);color:var(--accent)}
 .journey>button.here i{color:var(--accent)}
 .journey>button small{margin-left:auto;font:500 12.5px var(--mono);color:var(--faint)}
