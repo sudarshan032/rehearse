@@ -324,6 +324,10 @@ export default function Stage() {
       el.scrollTo({ top: last && last.offsetHeight > el.clientHeight ? top : el.scrollHeight, behavior: "smooth" });
     }, 50);
   }, [lines]);
+  // A line cut by the top edge of the transcript is hidden, so no half label or half sentence shows.
+  const hideCut = (el: HTMLElement) => {
+    for (const c of el.children as HTMLCollectionOf<HTMLElement>) c.classList.toggle("cut", c.offsetTop - el.offsetTop < el.scrollTop - 2 && c.offsetTop - el.offsetTop + c.offsetHeight > el.scrollTop);
+  };
 
   // Leaving the Voice test hangs up the call.
   useEffect(() => {
@@ -1414,7 +1418,7 @@ export default function Stage() {
             <>
               <span className="persona"><I d={IC.target} />You are the caller{persona ? ` · ${persona}` : ""} · {talk ? "bot speaks out loud · say “mute”" : "say “speak the replies” to hear the bot"}</span>
               <div className="minimap"><Flow bot={bot} mini lit={path} cur={lastBot?.step_id} bad={badStep} good={lastBot?.fixed ? lastBot.step_id : undefined} /></div>
-              <div className="subs" ref={subsEl}>
+              <div className="subs" ref={subsEl} onScroll={(e) => hideCut(e.currentTarget)}>
                 {lines.map((l, i) => (
                   <div key={i} className={`sub ${l.role === "caller" ? "me" : ""} ${l.broken?.length ? "bad" : ""}`}>
                     <small>{l.role === "caller" ? "You · caller" : `Bot · step ${stepNo(l.step_id)}`}</small>
@@ -1468,7 +1472,15 @@ export default function Stage() {
                   <li><b>v1</b><div><p>Built from your description.</p></div></li>
                 </ol>
               ) : (
-                !fix && <p className="empty">No changes yet. Click a step and say a change, or rehearse a call, point at a bad line and say the fix.</p>
+                !fix && (
+                  <div className="empty2">
+                    <p>No changes yet. Every change you say shows up here, with what it was before, so you can undo it.</p>
+                    <ol>
+                      <li><b>Change a step</b><span>Click a step on the flow, then say what it should do instead.</span><button className="btn ghost" onClick={() => goTo("", "blueprint")}>Open the flow</button></li>
+                      <li><b>Fix a bad reply</b><span>Rehearse a call. When a line breaks a rule, say the fix.</span><button className="btn" onClick={() => startCall("rehearse")}>Rehearse a call</button></li>
+                    </ol>
+                  </div>
+                )
               )}
             </>
           )}
@@ -1577,7 +1589,7 @@ export default function Stage() {
         <section className={`scene ${scene === "bots" ? "on" : ""}`}>
           <div className="eyebrow">saved in this browser · no sign-in</div>
           <h2>My bots</h2>
-          <BotList on={scene === "bots"} open={open} current={draft?.id} />
+          <BotList on={scene === "bots"} open={open} current={draft?.id} add={() => handle("start a new bot")} />
         </section>
 
         </main>
@@ -1701,7 +1713,7 @@ function Proof() {
   );
 }
 
-function BotList({ on, open, current }: { on: boolean; open: (d: Draft) => void; current?: string }) {
+function BotList({ on, open, current, add }: { on: boolean; open: (d: Draft) => void; current?: string; add: () => void }) {
   const [, redraw] = useState(0);
   const [sure, setSure] = useState("");
   const list = on ? listDrafts() : [];
@@ -1711,7 +1723,7 @@ function BotList({ on, open, current }: { on: boolean; open: (d: Draft) => void;
       {list.map((d, i) => (
         <div key={d.id} className="tile" style={{ ["--d" as string]: `${i * 0.05}s` }}>
           <button className="tilebody" onClick={() => open(d)}>
-            <small>{d.id === SAMPLE_ID ? "Sample · " : ""}{d.bot ? `v${d.bot.version}` : "questions"}{d.id === current ? " · open now" : ""}</small>
+            <small>{d.id === SAMPLE_ID ? "Sample · " : ""}{d.bot ? `v${d.bot.version}` : "Draft · questions to answer"}{d.id === current ? " · open now" : ""}</small>
             <b>{d.bot?.name ?? d.interview?.name ?? "Untitled"}</b>
             <span>{(d.bot?.languages ?? d.interview?.understood.languages ?? []).map(langName).join(" · ")}</span>
             {d.times?.start && (d.times.fixed ?? d.times.rehearsed) && (
@@ -1727,6 +1739,9 @@ function BotList({ on, open, current }: { on: boolean; open: (d: Draft) => void;
           )}
         </div>
       ))}
+      <div className="tile new" style={{ ["--d" as string]: `${list.length * 0.05}s` }}>
+        <button className="tilebody" onClick={add}><b>+ New bot</b><span>or say “start a new bot”</span></button>
+      </div>
     </div>
   );
 }

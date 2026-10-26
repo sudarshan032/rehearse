@@ -156,13 +156,13 @@ export function Flow({ bot, lit = [], cur, bad, good, chg = [], sel = [], mini, 
     const w = e.tag.length * 8.5 + 4; // 14px mono
     const at = (x: number, y: number): Box => {
       const x0 = e.anchor === "start" ? x - 2 : e.anchor === "end" ? x - w + 2 : x - w / 2;
-      return [x0, y - 12, x0 + w, y + 4];
+      return [x0, y - 13, x0 + w, y + 5];
     };
     const other = [...edges.filter((o) => o !== e).flatMap((o) => o.pts), ...e.pts.slice(-4)]; // and its own arrowhead
     let best = { x: e.mx, y: e.my, cost: Infinity };
     // On a phone the layers are narrow but tall, so a label may also slide sideways.
-    for (const dx of vert ? [0, 40, -40, 80, -80] : [0])
-      for (const dy of [0, -14, 14, -28, 28, -42, 42]) {
+    for (const dx of vert ? [0, 40, -40, 80, -80, 120, -120] : [0, 30, -30])
+      for (const dy of [0, -14, 14, -28, 28, -42, 42, -56, 56]) {
         const r = at(e.mx + dx, e.my + dy);
         const cost = boxes.filter((b) => hit(r, b)).length * 100 + other.filter((p) => inside(p, r)).length * 5 + (Math.abs(dy) + Math.abs(dx) * 2) / 100;
         if (cost < best.cost) best = { x: e.mx + dx, y: e.my + dy, cost };
