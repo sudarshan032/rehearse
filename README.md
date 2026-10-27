@@ -13,7 +13,7 @@ should go but doesn't want to write prompts or drag boxes.
 | | |
 |---|---|
 | **Before (my real work, Sep–Oct 2026)** | 7 voice agents, 22 live bots in 3 languages. One sales bot went live in 1 day but took about 3 weeks and about 87 prompt saves before it stopped breaking rules. Every break was found only after calls: about 61 hands-on hours, 58 recordings reviewed by hand. ([how I measured](docs/results.md)) |
-| **After (Rehearse)** | Same kind of bot, rebuilt by voice; the breaks that reached real callers are caught in a rehearsal. ([timings](docs/results.md)) |
+| **After (Rehearse)** | Same kind of bot, rebuilt by voice: built in 1.7 min, first rule break caught in a rehearsal 3.1 min after the brief, before any caller. ([timings](docs/results.md)) |
 | **Wispr usage** | 33,000+ words dictated 23–25 Oct ([daily log](docs/voice-log.md)) |
 | **Built by voice** | Every prompt to Claude Code and most commit messages were dictated with Wispr Flow |
 

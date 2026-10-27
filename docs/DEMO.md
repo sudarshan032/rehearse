@@ -42,3 +42,18 @@ Quality bar (official sample): "A real call ends, I hold Fn and say what happene
 - [ ] Flow bar visible at least twice (product use + build)
 - [ ] Usage card visible ≥ 3 s
 - [ ] Opens in a private window (unlisted, not private)
+
+## Recording script: Rehearse (27 Oct)
+
+Record each take on its own. Browser at 125%, dark mode, Do Not Disturb on. Hold the Wispr key for every spoken command.
+
+| Take | Do | Say (voice-over, or live into Wispr) |
+|---|---|---|
+| 1. Problem (0:00–0:15) | Proof page | "I build phone bots in Telugu, Hindi and English. One sales bot took three weeks to stop breaking rules, because real callers found every mistake." |
+| 2. Describe (0:15–0:35) | Home → hold Wispr → speak the brief of Bot 1 → questions appear → speak the answers | Live: the brief and answers from the test script. |
+| 3. Rehearse (0:35–0:55) | "Rehearse a call" → "Hmm." → "How much for three staff?" → a reply turns red | "I play the caller. The bot just quoted a price. That's a rule it must never break." |
+| 4. Fix (0:55–1:10) | Speak: "Fix this line: never give a price, send the pricing link on WhatsApp." → "Replay" → green | "I say the fix, replay the same line, and it passes." |
+| 5. Voice call (1:10–1:25) | Voice test → Start the call → say one English line, then one Telugu line | Live call; the bot answers in Telugu with the natural voice. |
+| 6. Number (1:25–1:35) | docs/results.md table | "First rule break caught 3.1 minutes after the brief, instead of three weeks of real calls." |
+| 7. Built by voice + usage card (1:35–1:45) | 5 s of dictating to Claude Code, then the Wispr usage card | "I built it the same way: every prompt was spoken. That's N words with Wispr Flow." |
+| 8. Try it (1:45–1:50) | Live URL on the first screen | "Open the link. No sign-in, a sample bot is ready." |

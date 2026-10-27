@@ -46,9 +46,12 @@ Same brief as the "before" bot, rewritten without client details.
 
 | Date | Bot | Built (min) | First test call | First rule break caught | Fixed + retested | Exported | Changes |
 |---|---|---|---|---|---|---|---|
+| 2026-10-26 | Booking App Trial Upgrade Bot (the trial-expiry agent, rebuilt by voice) | 1.7 | 2.6 | 3.1 | (not recorded: timing bug, fixed 27 Oct) | (run stopped before export) | 2 |
 
 ## Result
 
-[one sentence with the number, e.g. "From brief to a tested, fixed bot: X h before, Y min with Rehearse; Z rule breaks caught before any real caller"]
+The same kind of bot, built by voice: a first rule break was caught **3.1 minutes** after the brief, in a rehearsal,
+before any caller. With my old way the breaks were found by real callers over **about 3 weeks** (2 → 24 Oct).
 
-Where it loses (honest): [e.g. no real phone numbers; voices in the test are free browser voices]
+Where it loses (honest): no real phone numbers yet (calls run in the browser); the test voices are free voices, not
+production ones; one rebuilt bot is a small sample.

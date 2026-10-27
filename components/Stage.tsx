@@ -920,7 +920,7 @@ export default function Stage() {
     const stage = SAY_STAGE[scene];
     const pointing = !!sel;
     // Commands work with @mentions still in the box ("@Last reply export" → export).
-    const low = (mentionsIn(t).rest.replace(/\s+/g, " ") || t).toLowerCase().replace(/[.!?,]+$/g, "").trim();
+    const low = (mentionsIn(t).rest.replace(/\s+/g, " ") || t).toLowerCase().replace(/[.!?,]+$/g, "").replace(/^[\s.,!?-]+/, "").trim(); // Wispr can leave a stray ". " in front
     const words = low.split(/\s+/).length;
 
     if (/^(clear|deselect|unselect|cancel)( (it|that|this|the selection|selection))?$/.test(mentionsIn(low).rest || low)) return setBox(""), say(t, "Cleared");
@@ -966,7 +966,8 @@ export default function Stage() {
     if (backRe.test(t)) return back(), say(t, "Back");
     if (undoRe.test(t) && bot) return doUndo(t);
     if (/^(dark|light)( mode)?$/i.test(t)) return toggleTheme(t.toLowerCase().startsWith("dark") ? "dark" : "light");
-    if ((scene === "fix" || (scene === "call" && /^replay/i.test(low))) && replayRe.test(low)) return replay(t);
+    // On a call, "replay" anywhere in a short line ("sorry, let's do the replay") is the command, not the caller.
+    if ((scene === "fix" && replayRe.test(low)) || (scene === "call" && words <= 6 && /\breplay\b/.test(low))) return replay(t);
     if (scene === "voice" && stopRe.test(t)) return callEnd();
     if (scene === "voice" && /^(turn off|no|stop|disable) (the )?(interruptions?|cutting in|cut in)$/.test(low)) return setBarge(false), say(t, "Interruptions off: the bot finishes every line");
     if (scene === "voice" && /^(turn on|allow|enable|let me) (the )?(interruptions?|interrupt|cut in|cutting in)$/.test(low)) return setBarge(true), say(t, "Interruptions on: talk over the bot to cut in");
