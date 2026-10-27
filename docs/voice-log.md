@@ -5,11 +5,11 @@ Most-usage prize use. Write the card's total each evening, and what I dictated t
 
 | Date | Card total (words) | Words today | Local history check | What I dictated (apps + what) |
 |---|---|---|---|---|
-| 23 Oct | [from card] | [card today − card yesterday] | 1,693 words in 15 dictations (Chrome, Terminal, Slack), first at 18:13 IST | Wispr set-up; first Flow; the planning brief for this session (Claude Code in Terminal) |
+| 23 Oct | [from card] | [card today − card yesterday] | 3,938 words in 39 dictations (first check: 1,693 in 15) (Chrome, Terminal, Slack), first at 18:13 IST | Wispr set-up; first Flow; the planning brief for this session (Claude Code in Terminal) |
 | 24 Oct | ~4,300 (Siddhu read it from Insights, early in the day) | | 21,757 words in 205 dictations, longest 1,611 | Q&A for the plan; building Rehearse by voice in Claude Code (Terminal); testing the app in Chrome |
-| 25 Oct | | | 7,598 words in 76 dictations so far, longest 663 | UI and voice-call feedback, the before-numbers, the idea check (Terminal); app tests (Chrome) |
-| 26 Oct | | | | |
-| 27 Oct | | | | |
+| 25 Oct | | | 9,528 words in 99 dictations, longest 663 | UI and voice-call feedback, the before-numbers, the idea check (Terminal); app tests (Chrome) |
+| 26 Oct | | | 5,960 words in 33 dictations, longest 1,169 | Voice-call fixes (Terminal) |
+| 27 Oct | | | 11,507 words in 222 dictations, longest 520 | Recording script, video feedback, Wispr hint in the input box (Terminal, Cherry Studio) |
 | 28 Oct | | | | |
 | 29 Oct | | | | |
 | 30 Oct | | | | |

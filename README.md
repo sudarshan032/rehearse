@@ -3,7 +3,7 @@
 **Talk your voice bot into shape, then call it before your customers do.**
 Build, rehearse and fix a phone voice agent just by speaking, in Telugu, Hindi or English.
 
-[Try it live, no sign-in →](LIVE_URL) · [Demo video (1:50)](VIDEO_URL) · Builders track, No Hands: The Wispr Challenge
+[Try it live, no sign-in →](https://rehearse-ecru.vercel.app) · [Demo video (1:50)](VIDEO_URL) · Builders track, No Hands: The Wispr Challenge
 
 **Who it's for:** me, an AI engineer who builds voice bots for Indian businesses, and anyone who knows how a call
 should go but doesn't want to write prompts or drag boxes.
@@ -14,7 +14,7 @@ should go but doesn't want to write prompts or drag boxes.
 |---|---|
 | **Before (my real work, Sep–Oct 2026)** | 7 voice agents, 22 live bots in 3 languages. One sales bot went live in 1 day but took about 3 weeks and about 87 prompt saves before it stopped breaking rules. Every break was found only after calls: about 61 hands-on hours, 58 recordings reviewed by hand. ([how I measured](docs/results.md)) |
 | **After (Rehearse)** | Same kind of bot, rebuilt by voice: built in 1.7 min, first rule break caught in a rehearsal 3.1 min after the brief, before any caller. ([timings](docs/results.md)) |
-| **Wispr usage** | 33,000+ words dictated 23–25 Oct ([daily log](docs/voice-log.md)) |
+| **Wispr usage** | 52,690 words in 598 dictations, 23–27 Oct, from the Wispr history on my Mac; the official usage card goes here on 30 Oct ([daily log](docs/voice-log.md)) |
 | **Built by voice** | Every prompt to Claude Code and most commit messages were dictated with Wispr Flow |
 
 ## Try it in one minute
