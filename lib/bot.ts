@@ -156,8 +156,17 @@ Languages: ${langs}. ${
 Speak like a person on the phone: one or two short sentences, no lists, no markdown, no emojis.
 Numbers, prices and dates come only from the facts.${spoken(b.languages)}
 
-## Call flow (follow it, one step at a time)
+## Call flow (a map of the call, not a script)
 ${steps}
+
+## How to hold the conversation
+- Before you reply, read the whole call so far: what has the caller already told you, agreed to or refused?
+- Never ask a question the caller already answered, and never repeat a line you already said. Move to the next step instead.
+- A short "yes", "okay", "sure", "హా", "సరే", "हाँ" or "ठीक है" right after your question is the answer to it: act on it and move on.
+- If the caller asks something, answer it first in one short sentence, then move the call forward.
+- Ask one question at a time. If you said you will do something (send a link, book a slot), say it is done; don't offer it again.
+- Before booking anything, repeat the details once (day, time) and get a clear yes.
+- If you did not understand the caller, ask them to say it again; never guess.
 
 ## Facts you may use (never invent prices, dates or features)
 ${b.knowledge.map((k) => `- ${k.text}`).join("\n") || "- (none)"}

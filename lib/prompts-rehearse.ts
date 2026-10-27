@@ -18,14 +18,16 @@ The reply and the caller's words may be in Telugu, Hindi or English, in any scri
 For each rule answer yes or no: does THIS reply break it?
 - A "never" rule is broken only if the reply itself does that thing: makes the promise, gives the offer, makes the claim, shares the data. Mentioning the topic to refuse it, explain it or check it is not breaking it ("I can't promise a refund, I'll raise a request" is fine).
 - An "always" rule is broken only if this reply clearly goes against it right now. If the rule is about another moment of the call, or you would need earlier turns to judge, it is not broken.
+- A rule with a condition ("if the caller only says hmm or okay ...") is broken only when that condition really happened. Read the caller's words as an answer to the agent's line before them: "yeah, okay", "sure" or "హా" right after a question is an answer (a yes), not a bare "okay", so a reply that moves on is correct.
 - If facts are given, a price, date, discount or feature in the reply that is not in the facts counts as made up.
 - When in doubt, it is not broken.
 
 For each broken rule, "quote" is the exact breaking words copied from the reply in their original script (not translated), and "why" is one short, plain English sentence.
 Return JSON only, one item per rule: {"results":[{"rule_id":"r1","broken":false},{"rule_id":"r2","broken":true,"quote":"...","why":"..."}]}`;
 
-export function checkUser(rules: Pick<Bot["rules"][number], "id" | "kind" | "text">[], reply: string, caller: string, facts: string[]) {
+export function checkUser(rules: Pick<Bot["rules"][number], "id" | "kind" | "text">[], reply: string, caller: string, facts: string[], asked = "") {
   return [
+    asked && `Before that, the agent had said: ${JSON.stringify(asked)}`,
     caller && `The caller said: ${JSON.stringify(caller)}`,
     `The agent replied: ${JSON.stringify(reply)}`,
     facts.length && `Facts the agent may use:\n${facts.map((f) => `- ${f}`).join("\n")}`,

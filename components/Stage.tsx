@@ -604,7 +604,7 @@ export default function Stage() {
     setLines([...mine, line]);
     if (talk) speak(r.reply, ttsLang(r.reply, b)).catch(() => {});
     const c = await run("Checking the rules", () =>
-      post<{ broken: Broken[] }>("/api/check", { rules: b.rules.map(({ id, kind, text }) => ({ id, kind, text })), reply: r.reply, caller: t, knowledge: b.knowledge.map(({ text }) => ({ text })) }),
+      post<{ broken: Broken[] }>("/api/check", { rules: b.rules.map(({ id, kind, text }) => ({ id, kind, text })), reply: r.reply, caller: t, asked: base.findLast((l) => l.role === "bot")?.text ?? "", knowledge: b.knowledge.map(({ text }) => ({ text })) }),
     );
     const checked = !!c && !(c as { ai_off?: boolean }).ai_off;
     mark("rehearsed");

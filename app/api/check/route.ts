@@ -8,6 +8,7 @@ const Body = z.object({
   rules: z.array(z.object({ id: z.string().min(1).max(40), kind: z.enum(["never", "always"]), text: z.string().max(300) })).max(24),
   reply: z.string().trim().min(1).max(2000),
   caller: z.string().trim().max(1000).default(""),
+  asked: z.string().trim().max(2000).default(""), // the agent's line before the caller's, so "okay" can be read as an answer
   knowledge: z.array(z.object({ text: z.string().max(400) })).max(30).default([]),
 });
 
@@ -28,14 +29,14 @@ async function handler(req: Request) {
   const t0 = Date.now();
   const body = Body.safeParse(await req.json().catch(() => null));
   if (!body.success) return Response.json({ error: "Send the bot's rules and one reply to check." }, { status: 400 });
-  const { rules, reply, caller, knowledge } = body.data;
+  const { rules, reply, caller, asked, knowledge } = body.data;
 
   const { broken, unsure } = keywordCheck(rules, reply, caller);
   if (!unsure.length) return Response.json({ broken, ms: Date.now() - t0, method: "keywords" });
 
   const ask = rules.filter((r) => unsure.includes(r.id));
   try {
-    const { data } = await askJSON(CHECK_SYSTEM, checkUser(ask, reply, caller, knowledge.map((k) => k.text)), Verdicts);
+    const { data } = await askJSON(CHECK_SYSTEM, checkUser(ask, reply, caller, knowledge.map((k) => k.text), asked), Verdicts);
     const said = reply.normalize("NFC").toLowerCase();
     for (const v of data.results) {
       if (!v.broken || !ask.some((r) => r.id === v.rule_id) || broken.some((b) => b.rule_id === v.rule_id)) continue;
