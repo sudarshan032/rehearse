@@ -5,3 +5,6 @@ prototype
 docs
 *.part
 wispr-flow-data-export*
+.cache
+video
+public/mocks
