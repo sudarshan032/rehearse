@@ -23,7 +23,7 @@ I built it the same way: every prompt to Claude Code was spoken with Wispr Flow.
 
 Demo (1:55): https://youtu.be/u4y-gDxb1ZQ
 Try it, no sign-in: https://rehearse-ecru.vercel.app
-Code: https://github.com/sudarshan032/rehearse
+Full story on dev.to: https://dev.to/sudarshan032/i-stopped-finding-voice-bot-bugs-on-real-calls-now-i-rehearse-them-by-voice-2l9m
 
 Thanks @WeMakeDevs and @Wispr Flow.
 
