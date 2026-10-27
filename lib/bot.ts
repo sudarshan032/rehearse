@@ -108,11 +108,11 @@ export const langName = (l: string) => LANGS[l]?.name ?? l;
 // Small models translate the flow's English lines into bookish Telugu/Hindi that nobody says on a call.
 // What real callers hear instead: everyday words, with the English words people actually use, in the same script.
 const SPOKEN: Record<string, string> = {
-  te: `Telugu: everyday spoken Telugu, like talking to a shop owner on the phone. Use the English words people really say, written in Telugu letters (ఫ్రీ ప్లాన్, వర్డ్ లిమిట్, ట్రయల్, లింక్, యాప్స్, ట్రై చేయండి). Never bookish words.
-  Bad: "మీరు గత వారం ఫ్రీ ప్లాన్ ఉపయోగించారు. మీరు వారపు పదాల పరిమితిని చేరారా?" Good: "మీరు లాస్ట్ వీక్ ఫ్రీ ప్లాన్ వాడారు కదా. వర్డ్ లిమిట్ అయిపోయిందా?"
+  te: `Telugu: everyday spoken Telugu, like talking to a shop owner on the phone. Use the English words people really say, written in Telugu letters (ప్లాన్, ట్రయల్, లింక్, డెమో, వాట్సాప్, ట్రై చేయండి). Never bookish words.
+  Bad: "మీరు గత వారం మా యాప్ ఉపయోగించారు. మీకు సహాయం అవసరమా?" Good: "మీరు లాస్ట్ వీక్ మా యాప్ వాడారు కదా. ఏమైనా హెల్ప్ కావాలా?"
   Bad: "14 రోజుల ఉచిత ట్రయల్ ప్రయత్నించాలనుకుంటున్నారా?" Good: "14 రోజులు ఫ్రీ ట్రయల్ ఉంది, ట్రై చేస్తారా?"`,
-  hi: `Hindi: everyday spoken Hindi, the way people talk on the phone. Use the English words people really say, written in Devanagari (फ्री प्लान, वर्ड लिमिट, ट्रायल, लिंक, ऐप्स). Never formal words.
-  Bad: "क्या आप साप्ताहिक शब्द सीमा तक पहुँच गए?" Good: "क्या आपकी वर्ड लिमिट खत्म हो गई?"
+  hi: `Hindi: everyday spoken Hindi, the way people talk on the phone. Use the English words people really say, written in Devanagari (प्लान, ट्रायल, लिंक, डेमो, व्हाट्सऐप). Never formal words.
+  Bad: "क्या आपको सहायता की आवश्यकता है?" Good: "कोई हेल्प चाहिए क्या?"
   Bad: "आप 14 दिन का परीक्षण आज़मा सकते हैं।" Good: "14 दिन का फ्री ट्रायल है, ट्राई करेंगे?"
   If your name is a woman's name, use feminine verbs: समझ गई, बता सकती हूँ, भेज देती हूँ.`,
 };

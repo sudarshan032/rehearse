@@ -533,3 +533,4 @@ body.listening .tries{opacity:0}
 }
 .voicescene .live em{font-style:normal}
 @media (max-width:760px){.voicescene .live em{display:none}}
+.vpick .vload{grid-column:1/-1;justify-self:end;color:var(--muted);font-size:13px}

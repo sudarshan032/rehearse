@@ -9,6 +9,11 @@
 //   const { firstSoundMs, engine, done } = await speak(reply, "en-IN", (i) => showUpTo(i));
 //
 // Model files: `node scripts/get-kitten.mjs` saves them to public/models/kitten/. Missing there, they load from Hugging Face.
+//
+// Telugu: the system Telugu voice (macOS "Geeta") sounds robotic, so Telugu is spoken by Piper voices
+// (https://huggingface.co/rhasspy/piper-voices, trained on IIT Madras IndicTTS, free for non-commercial use), run in the
+// browser with onnxruntime-web. Text → phonemes is lib/telugu-ipa.ts. The model (63 MB) downloads once, is kept in the
+// browser's cache, and the system voice speaks until it is ready.
 
 export type SpeakLang = "te-IN" | "hi-IN" | "en-IN";
 const KITTEN = process.env.NEXT_PUBLIC_VOICE === "kitten";
@@ -35,6 +40,80 @@ type Ort = {
   InferenceSession: { create(model: Uint8Array, opts: object): Promise<{ run(feeds: object): Promise<Record<string, Tensor>> }> };
 };
 type Kitten = (text: string) => Promise<Float32Array>;
+
+const PIPER_BASE = "https://huggingface.co/rhasspy/piper-voices/resolve/main/te/te_IN/";
+export const PIPER: { name: string; id: string }[] = [
+  { name: "Padmavathi (natural)", id: "padmavathi" },
+  { name: "Maya (natural)", id: "maya" },
+  { name: "Venkatesh (natural, male)", id: "venkatesh" },
+];
+const PIPER_RATE = 22_050;
+type Piper = (text: string) => Promise<Float32Array>;
+const pipers = new Map<string, Promise<Piper>>();
+const ready = new Set<string>();
+
+// Kept in the browser's Cache Storage, so the 63 MB comes down only once.
+async function cachedFetch(url: string) {
+  const cache = typeof caches !== "undefined" ? await caches.open("rehearse-voices").catch(() => null) : null;
+  const hit = await cache?.match(url);
+  if (hit) return hit.arrayBuffer();
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Could not download the Telugu voice (${res.status}).`);
+  await cache?.put(url, res.clone()).catch(() => {});
+  return res.arrayBuffer();
+}
+
+function loadPiper(id: string): Promise<Piper> {
+  let p = pipers.get(id);
+  if (p) return p;
+  p = (async () => {
+    const ort: Ort = await import(/* webpackIgnore: true */ /* turbopackIgnore: true */ `${ORT}ort.wasm.min.mjs`);
+    ort.env.wasm.wasmPaths = ORT;
+    const file = `${PIPER_BASE}${id}/medium/te_IN-${id}-medium.onnx`;
+    const [{ teluguIPA }, model, cfg] = await Promise.all([
+      import("./telugu-ipa"),
+      cachedFetch(file),
+      cachedFetch(`${file}.json`).then((b) => JSON.parse(new TextDecoder().decode(b))),
+    ]);
+    const map: Record<string, number[]> = cfg.phoneme_id_map;
+    const { noise_scale, length_scale, noise_w } = cfg.inference;
+    const session = await ort.InferenceSession.create(new Uint8Array(model), { executionProviders: ["wasm"], graphOptimizationLevel: "all" });
+    // Same ids as Piper: start, each phoneme followed by the pad, end.
+    const say = async (text: string) => {
+      const ipa = teluguIPA(/[.!?,;:]$/.test(text) ? text : `${text}.`);
+      const ids = [...map["^"], ...map["_"], ...[...ipa].flatMap((c) => (map[c] ? [...map[c], ...map["_"]] : [])), ...map["$"]];
+      const out = await session.run({
+        input: new ort.Tensor("int64", BigInt64Array.from(ids, BigInt), [1, ids.length]),
+        input_lengths: new ort.Tensor("int64", BigInt64Array.from([BigInt(ids.length)]), [1]),
+        // A little slower than the model's default: phone calls are easier to follow.
+        scales: new ort.Tensor("float32", new Float32Array([noise_scale, length_scale * 1.05, noise_w]), [3]),
+      });
+      return Object.values(out)[0].data;
+    };
+    await say("సరే."); // warm-up: the first run is slow
+    ready.add(id);
+    return say;
+  })();
+  p.catch(() => pipers.delete(id)); // a later call can retry
+  pipers.set(id, p);
+  return p;
+}
+const piperOf = (name: string) => PIPER.find((v) => v.name === name);
+/** For the voice picker: load a Piper voice by its name (resolves at once for a system voice). */
+export const loadVoiceByName = async (name: string) => {
+  const v = piperOf(name);
+  if (v) await loadPiper(v.id);
+};
+
+/** Start downloading the picked (or default) Telugu voice, so it is ready before the bot speaks Telugu. */
+export function preloadTelugu() {
+  let want = "";
+  try {
+    want = localStorage.getItem("rh-voice-te-IN") ?? "";
+  } catch {}
+  const v = want ? piperOf(want) : PIPER[0];
+  if (v) loadPiper(v.id).catch(() => {});
+}
 
 let kitten: Promise<Kitten> | null = null;
 let ctx: AudioContext | null = null;
@@ -123,8 +202,8 @@ function sentences(text: string) {
 }
 
 // Queue one clip right after the previous one, so the pieces play without gaps.
-function play(ac: AudioContext, wave: Float32Array, at: number) {
-  const buf = ac.createBuffer(1, wave.length, RATE);
+function play(ac: AudioContext, wave: Float32Array, at: number, rate = RATE) {
+  const buf = ac.createBuffer(1, wave.length, rate);
   buf.copyToChannel(new Float32Array(wave), 0);
   const src = ac.createBufferSource();
   src.buffer = buf;
@@ -156,6 +235,41 @@ async function kittenSay(text: string, t0: number) {
   return { firstSoundMs, engine: "KittenTTS nano 0.8 (in browser)", done };
 }
 
+// Piper, sentence by sentence: the first sentence plays while the next is made. Words are shown at the pace of each clip.
+async function piperSay(id: string, text: string, t0: number, onWord?: (end: number) => void) {
+  const my = turn;
+  const [say, ac] = await Promise.all([loadPiper(id), audioReady()]);
+  const parts = sentences(text);
+  if (!parts.length) throw new Error("Nothing to say.");
+  const clips: { at: number; end: number; from: number; to: number }[] = [];
+  let at = 0, pos = 0;
+  const add = async (part: string) => {
+    const wave = await say(part);
+    if (my !== turn) throw new Error("Stopped: a newer reply is playing.");
+    const from = text.indexOf(part, pos), to = from + part.length;
+    pos = to;
+    const start = Math.max(at, ac.currentTime);
+    at = play(ac, wave, at, PIPER_RATE);
+    clips.push({ at: start, end: at, from, to });
+  };
+  await add(parts[0]);
+  const firstSoundMs = performance.now() - t0;
+  const done = (async () => {
+    const tick = setInterval(() => {
+      const now = ac.currentTime, c = clips.find((x) => now >= x.at && now < x.end);
+      if (c) onWord?.(Math.round(c.from + ((now - c.at) / (c.end - c.at)) * (c.to - c.from)));
+    }, 100);
+    try {
+      for (const part of parts.slice(1)) await add(part);
+      while (my === turn && ac.currentTime < at) await new Promise((r) => setTimeout(r, 50));
+    } finally {
+      clearInterval(tick);
+      if (my === turn) onWord?.(text.length);
+    }
+  })().catch(() => {});
+  return { firstSoundMs, engine: `Piper ${id} (in browser)`, done };
+}
+
 function browserVoices(): Promise<SpeechSynthesisVoice[]> {
   const now = speechSynthesis.getVoices();
   if (now.length) return Promise.resolve(now);
@@ -185,6 +299,7 @@ export async function voicesFor(lang: SpeakLang) {
   const list = (await browserVoices()).filter((v) => norm(v).startsWith(lang.slice(0, 2).toLowerCase()))
     .sort((a, b) => rank(b, lang) - rank(a, lang))
     .map((v) => v.name);
+  if (lang === "te-IN") list.unshift(...PIPER.map((v) => v.name));
   let picked = "";
   try {
     picked = localStorage.getItem(PREF(lang)) ?? "";
@@ -257,6 +372,19 @@ export async function speak(text: string, lang: SpeakLang, onWord?: (end: number
   stopAll();
   const clean = text.replace(/\p{Extended_Pictographic}/gu, "").replace(/\s+/g, " ").trim();
   if (!clean) throw new Error("Nothing to say.");
+  if (lang === "te-IN") {
+    let want = "";
+    try {
+      want = localStorage.getItem(PREF(lang)) ?? "";
+    } catch {}
+    const v = want ? piperOf(want) : PIPER[0];
+    if (v && ready.has(v.id)) return piperSay(v.id, clean, t0, onWord);
+    if (v) {
+      loadPiper(v.id).catch(() => {}); // still downloading: the system voice speaks this one
+      const r = await browserSay(clean, lang, t0, onWord);
+      return { ...r, engine: `${r.engine}, Piper ${v.id} still loading` };
+    }
+  }
   if (lang !== "en-IN" || !KITTEN) return browserSay(clean, lang, t0, onWord);
   try {
     return await kittenSay(clean, t0);
@@ -269,6 +397,16 @@ export async function speak(text: string, lang: SpeakLang, onWord?: (end: number
 
 /** Optional warm-up: download and load the KittenTTS model before the first reply. */
 export async function preloadVoice(): Promise<void> {
+  preloadTelugu();
   if (KITTEN) await loadKitten();
   else if (typeof speechSynthesis !== "undefined") await browserVoices();
 }
+
+// Dev only: lets the test script make a Telugu clip in a real browser and time it.
+if (typeof window !== "undefined" && process.env.NODE_ENV !== "production")
+  (window as unknown as { __piper: unknown }).__piper = async (text: string, id = PIPER[0].id) => {
+    const say = await loadPiper(id);
+    const t0 = performance.now();
+    const wave = await say(text);
+    return { ms: performance.now() - t0, wave: Array.from(wave) };
+  };

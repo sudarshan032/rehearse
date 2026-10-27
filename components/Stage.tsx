@@ -5,7 +5,7 @@ import { guessIntent, personaOf, type Stage as SayStage, type Tab } from "@/lib/
 import { getDraft, listDrafts, newId, post, removeDraft, saveDraft, type Change, type Draft } from "@/lib/store";
 import { EXPORTS } from "@/lib/export";
 import { SAMPLE_BOT, SAMPLE_BRIEF, SAMPLE_CALL, SAMPLE_ID, sampleFix, sampleReplay } from "@/lib/sample";
-import { pickVoiceName, preloadVoice, speak, stopSpeaking, voicesFor, type SpeakLang } from "@/lib/speak";
+import { loadVoiceByName, pickVoiceName, preloadVoice, speak, stopSpeaking, voicesFor, type SpeakLang } from "@/lib/speak";
 import { Flow } from "./Flow";
 
 type Scene = "describe" | "questions" | "building" | "blueprint" | "rules" | "knowledge" | "prompt" | "stack" | "call" | "fix" | "voice" | "export" | "bots" | "proof";
@@ -1663,20 +1663,28 @@ const SAMPLE_LINE: Record<SpeakLang, string> = {
 };
 function VoicePick({ lang }: { lang: SpeakLang }) {
   const [v, setV] = useState<{ list: string[]; picked: string }>({ list: [], picked: "" });
+  const [loading, setLoading] = useState("");
   useEffect(() => {
     voicesFor(lang).then(setV);
   }, [lang]);
   if (!v.list.length) return null;
+  const now = v.picked || v.list[0];
   return (
     <label>
       <span>{lang === "te-IN" ? "Telugu" : lang === "hi-IN" ? "Hindi" : "English"} voice</span>
-      <select value={v.picked || v.list[0]} onChange={(e) => {
-        pickVoiceName(lang, e.target.value);
-        setV({ ...v, picked: e.target.value });
+      <select value={now} onChange={async (e) => {
+        const name = e.target.value;
+        pickVoiceName(lang, name);
+        setV({ ...v, picked: name });
+        // A natural Telugu voice downloads once (63 MB): say so, then play the sample in that voice.
+        setLoading(/\(natural/.test(name) ? "Downloading this voice once (63 MB)…" : "");
+        await loadVoiceByName(name).catch(() => setLoading("Could not download this voice. The system voice is used."));
+        setLoading((l) => (l.startsWith("Could not") ? l : ""));
         speak(SAMPLE_LINE[lang], lang).catch(() => {});
       }}>
         {v.list.map((n) => <option key={n}>{n}</option>)}
       </select>
+      {loading && <small className="vload">{loading}</small>}
     </label>
   );
 }

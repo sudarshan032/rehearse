@@ -51,8 +51,9 @@ turns messy mixed-language speech into clean text in the one box Rehearse listen
 - **AI (free tier):** Groq `gpt-oss-120b` writes the questions, the blueprint (flow, rules, facts) and the bot's
   replies, checks unclear rule breaks, and applies spoken edits as small patches. A fix may never remove a rule
   unless you say so.
-- **Voice test:** Groq Whisper hears you, the browser speaks the reply with each word lit up, and you can cut in
-  (barge-in). Telugu and Hindi use the browser's own recogniser when it hears them better.
+- **Voice test:** Groq Whisper hears you, the bot speaks the reply with each word lit up, and you can cut in
+  (barge-in). The call follows the caller's language, even when they switch mid-call. Telugu is spoken by a natural
+  Piper voice that runs in your browser (63 MB, downloaded once); English and Hindi use the browser's voices.
 - **The prompt is compiled** from the flow, rules and facts, so what you see is what the bot runs on.
 - **Export, honestly:** copy the prompt anywhere, or ready API commands for Vapi and Retell, a Pipecat starter, or a
   full backup.
@@ -68,7 +69,7 @@ npm run dev            # http://localhost:3000
 ## What it does not do (yet)
 
 - No real phone numbers; calls happen in the browser.
-- The voice test uses free browser voices, so Telugu sounds plain.
+- The voice test uses free voices: good enough to hear the call, not production quality (export to Murf or similar).
 - Bots live in your browser only; no accounts, no sync.
 
 ## How it was built
@@ -77,3 +78,5 @@ npm run dev            # http://localhost:3000
 - **AI assistance:** I directed Claude Code by voice (Wispr Flow) and reviewed every change. The product uses Groq's
   free tier.
 - Stack: Next.js, TypeScript, plain CSS, zod, Groq.
+- Telugu voices: [Piper](https://huggingface.co/rhasspy/piper-voices) te_IN (Padmavathi, Maya, Venkatesh), trained
+  on [IIT Madras IndicTTS](https://www.iitm.ac.in/donlab/indictts) data, free for non-commercial use.
