@@ -1,0 +1,30 @@
+𝗠𝘆 𝘃𝗼𝗶𝗰𝗲 𝗯𝗼𝘁 𝗯𝗿𝗼𝗸𝗲 𝗮 𝗿𝘂𝗹𝗲 𝗶𝗻 𝟯.𝟭 𝗺𝗶𝗻𝘂𝘁𝗲𝘀. 𝗕𝗲𝗳𝗼𝗿𝗲, 𝗳𝗶𝗻𝗱𝗶𝗻𝗴 𝘁𝗵𝗮𝘁 𝘁𝗼𝗼𝗸 𝟯 𝘄𝗲𝗲𝗸𝘀.
+
+At work I build phone voice bots in English, Hindi and Telugu. One of my sales bots went live in one day, then took about 3 weeks of real calls before it stopped breaking its rules. Every mistake was found by a caller.
+
+So for #NoHandsChallenge I built 𝗥𝗲𝗵𝗲𝗮𝗿𝘀𝗲: you build, rehearse and fix a voice bot just by speaking.
+
+𝗛𝗼𝘄 𝗶𝘁 𝘄𝗼𝗿𝗸𝘀
+🎙️ I hold the Wispr key and describe the bot, like briefing a teammate.
+🧭 It asks a few questions, then draws the call flow, the rules and the prompt.
+🎭 I play the caller. When the bot breaks a rule, the line turns red.
+🔁 I say the fix, and the same caller line is replayed.
+📞 Then a real voice call in the browser, in Hindi and Telugu too.
+
+𝗧𝗵𝗲 𝗿𝗲𝘀𝘂𝗹𝘁
+⏱️ First rule break caught 𝟯.𝟭 𝗺𝗶𝗻𝘂𝘁𝗲𝘀 after the brief, before any real caller.
+📅 Before Rehearse: about 𝟯 𝘄𝗲𝗲𝗸𝘀.
+
+𝗕𝘂𝗶𝗹𝘁 𝘄𝗶𝘁𝗵𝗼𝘂𝘁 𝘁𝘆𝗽𝗶𝗻𝗴
+Every prompt to Claude Code was spoken with Wispr Flow.
+🗣️ 𝟲𝟭,𝟵𝟱𝟮 𝘄𝗼𝗿𝗱𝘀 dictated
+📆 𝟮 𝘄𝗲𝗲𝗸𝘀 of building by voice
+⚡ 𝟭𝟭𝟬 𝘄𝗼𝗿𝗱𝘀 𝗽𝗲𝗿 𝗺𝗶𝗻𝘂𝘁𝗲
+
+▶️ Demo (1:55): https://youtu.be/u4y-gDxb1ZQ
+🌐 Try it, no sign-in: https://rehearse-ecru.vercel.app
+📝 Full story: https://dev.to/sudarshan032/i-stopped-finding-voice-bot-bugs-on-real-calls-now-i-rehearse-them-by-voice-2l9m
+
+Thanks @WeMakeDevs and @Wispr Flow 🙏
+
+#NoHandsChallenge #WisprFlow #VoiceAI #BuildInPublic
