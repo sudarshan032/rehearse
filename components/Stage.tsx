@@ -546,6 +546,9 @@ export default function Stage() {
   function applyEdit(t: string, r: EditResult) {
     if (!draft?.bot) return;
     if (!r.applied) return say(t, r.summary, { ans: true });
+    // The model sometimes names steps by id ("end_no"): show the step's label instead.
+    const label = (id: string) => r.bot.flow.steps.find((s) => s.id === id)?.label ?? draft.bot!.flow.steps.find((s) => s.id === id)?.label ?? id.replace(/_/g, " ");
+    r = { ...r, summary: r.summary.replace(/\b[a-z]+(?:_[a-z0-9]+)+\b/g, (id) => `“${label(id)}”`) };
     setUndo((u) => [...u.slice(-20), draft.bot!]);
     const lastBotLine = [...lines].reverse().find((l) => l.role === "bot");
     const onTurn = sel?.kind === "turn" || scene === "call";

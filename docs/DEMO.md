@@ -43,17 +43,69 @@ Quality bar (official sample): "A real call ends, I hold Fn and say what happene
 - [ ] Usage card visible ≥ 3 s
 - [ ] Opens in a private window (unlisted, not private)
 
-## Recording script: Rehearse (27 Oct)
+## Recording script: Rehearse (27 Oct, HyperFrames cut)
 
-Record each take on its own. Browser at 125%, dark mode, Do Not Disturb on. Hold the Wispr key for every spoken command.
+The video is cut in HyperFrames (HTML → MP4, rendered in the sandbox). Titles, the number, captions and the end card
+are made there. Product screens with no voice in them (the saved rule break, the fix card, the proof page) are recorded
+headlessly from the live site. Siddhu records only what must be real: Wispr in use, the live call, the voice-over.
 
-| Take | Do | Say (voice-over, or live into Wispr) |
-|---|---|---|
-| 1. Problem (0:00–0:15) | Proof page | "I build phone bots in Telugu, Hindi and English. One sales bot took three weeks to stop breaking rules, because real callers found every mistake." |
-| 2. Describe (0:15–0:35) | Home → hold Wispr → speak the brief of Bot 1 → questions appear → speak the answers | Live: the brief and answers from the test script. |
-| 3. Rehearse (0:35–0:55) | "Rehearse a call" → "Hmm." → "How much for three staff?" → a reply turns red | "I play the caller. The bot just quoted a price. That's a rule it must never break." |
-| 4. Fix (0:55–1:10) | Speak: "Fix this line: never give a price, send the pricing link on WhatsApp." → "Replay" → green | "I say the fix, replay the same line, and it passes." |
-| 5. Voice call (1:10–1:25) | Voice test → Start the call → say one English line, then one Telugu line | Live call; the bot answers in Telugu with the natural voice. |
-| 6. Number (1:25–1:35) | docs/results.md table | "First rule break caught 3.1 minutes after the brief, instead of three weeks of real calls." |
-| 7. Built by voice + usage card (1:35–1:45) | 5 s of dictating to Claude Code, then the Wispr usage card | "I built it the same way: every prompt was spoken. That's N words with Wispr Flow." |
-| 8. Try it (1:45–1:50) | Live URL on the first screen | "Open the link. No sign-in, a sample bot is ready." |
+Film (about 1:40): hook (the real broken Telugu line, red pencil, "3 weeks") → Rehearse title → build by voice →
+rehearsal breaks rule 1 → fix by voice → replay passes → live Telugu call → 3.1 min vs about 3 weeks → built by voice
++ usage card → link.
+
+### Set-up (once)
+- Do Not Disturb on. Hide the Dock. Close other apps.
+- Chrome **private window**, https://rehearse-ecru.vercel.app, dark theme, zoom 100%, full screen (Ctrl+Cmd+F).
+- Check the Wispr Flow bar shows at the bottom of the screen while you hold Fn.
+- Record with Cmd+Shift+5 → Record Entire Screen → Options → Microphone: MacBook microphone. Speakers on, no headphones
+  (the Mac only records the bot's voice through the mic).
+- Hold Fn for every spoken line. Wait for the result before the next line. Don't worry about waits: they are cut.
+
+### Take 1: build by voice (Chrome)
+1. "Start a new bot."
+2. "Make an outbound sales bot for my booking app. It calls salon and clinic owners whose free trial ends in two
+   days, and gets them to pick a paid plan or book a short demo. It speaks English, Hindi and Telugu."
+3. When the questions show: "Basic has 100 bookings a month, Pro has 500. Never say a price on the call, send the
+   pricing link on WhatsApp. Demos are 15 minutes, Monday to Saturday, 10 am to 6 pm. Never book a demo without a
+   clear yes. If they only say hmm or okay, stay on the line."
+4. When the flow shows: wait 3 s, "show the rules", wait 3 s, "show the flow". Stop recording.
+
+### Take 2: fix by voice (Chrome)
+1. "Watch a bot break a rule." Wait for the red line (about 8 s).
+2. "If they ask for a refund, offer a manager callback instead."
+3. When "Fixed where it broke" shows: "Replay." Wait for the green "Fixed · rule kept". Stop recording.
+
+### Take 3: live voice call in Telugu (Chrome, the bot from Take 1)
+1. "My bots", open the Booking App bot, then "voice test".
+2. "Turn off interruptions." Then "start the call".
+3. After the greeting, speak (no Fn, the call listens): "నమస్తే, నా ట్రయల్ రేపు అయిపోతుంది. ప్రో ప్లాన్ గురించి చెప్పండి."
+4. Next: "సరే, బుధవారం పదకొండు గంటలకు డెమో బుక్ చేయండి."  Then: "అవును."
+5. "End the call." Stop recording.
+
+### Take 4: building by voice (Terminal, 10 s)
+In Claude Code, hold Fn and dictate a real prompt, for example: "Add today's usage card total to the voice log."
+
+### Take 5: the usage card (screenshot)
+Wispr Flow → Insights → Your usage. Cmd+Shift+4, then Space, click the window.
+
+### Round 2: voice-over (QuickTime → File → New Audio Recording)
+Quiet room, 20 cm from the mic. Read each line, wait 2 s, next line. A bad line: just say it again; the last take wins.
+
+1. My sales bot just promised a full refund. It's not allowed to.
+2. Finding mistakes like this used to take me three weeks of calls.
+3. So I built Rehearse. You build, rehearse and fix a phone bot, just by speaking.
+4. I hold the Wispr key and describe the bot, like briefing a teammate.
+5. It asks what it needs to know. I answer out loud.
+6. Then it draws the call flow, the rules and the prompt.
+7. Now I rehearse. A Telugu caller asks for a refund.
+8. The bot promises one. Rehearse marks the line, and the rule it broke.
+9. I say the fix.
+10. Then I replay the same caller line, and the rule holds.
+11. Then a real voice call, with a natural Telugu voice that runs in the browser.
+12. On my own bot, the first rule break showed up 3.1 minutes after the brief.
+13. Before, that took about three weeks of real and test calls.
+14. I built Rehearse the same way, by speaking to Claude Code with Wispr Flow.
+15. Open the link. No sign-in, and a sample bot is ready.
+
+### Hand-off
+Copy everything into `video/raw/` (git-ignored): `take1.mov` … `take4.mov`, `usage.png`, `vo.m4a`.
