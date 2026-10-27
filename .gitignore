@@ -46,3 +46,4 @@ public/models/kitten/
 *.m4a
 *.mkv
 video/out/
+public/mocks/
