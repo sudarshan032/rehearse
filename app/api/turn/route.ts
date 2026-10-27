@@ -2,6 +2,7 @@ import { z } from "zod";
 import { fail } from "@/lib/llm";
 import { chatJSON, type Msg } from "@/lib/llm-fast";
 import { CALL_START, CALLER_SILENT, LANG_HINT } from "@/lib/prompts-rehearse";
+import { logged } from "@/lib/devlog";
 
 const Line = z.object({
   role: z.enum(["caller", "bot"]),
@@ -35,7 +36,7 @@ function short(s: string) {
   return end > 40 ? cut.slice(0, end + 1) : `${cut.slice(0, cut.lastIndexOf(" "))}…`;
 }
 
-export async function POST(req: Request) {
+async function handler(req: Request) {
   const t0 = Date.now();
   const body = Body.safeParse(await req.json().catch(() => null));
   if (!body.success) return Response.json({ error: "The call data is missing or too long." }, { status: 400 });
@@ -63,7 +64,7 @@ export async function POST(req: Request) {
     const was = [...lines].reverse().find((l) => l.role === "bot")?.text ?? "";
     const prev = /[\u0C00-\u0C7F]/.test(was) ? "te" : /[\u0900-\u097F]/.test(was) ? "hi" : "";
     // A sound like "మ్.." (a heard "hmm") is too short to switch the call's language: it takes 3+ letters.
-    const lang = te && hi && prev ? prev : te >= 3 && te > hi && te >= en ? "te" : hi >= 3 && hi > te && hi >= en ? "hi" : "";
+    const lang = te && hi && prev ? prev : te >= 3 && te > hi && te >= en ? "te" : hi >= 3 && hi > te && hi >= en ? "hi" : prev && !te && !hi && en >= 8 ? "en" : ""; // back to English after a Telugu/Hindi turn
     if (lang && bot.follow_caller_language && (!bot.languages.length || bot.languages.includes(lang)))
       messages[messages.length - 1].content += `\n\n${LANG_HINT[lang]}`;
   }
@@ -78,3 +79,5 @@ export async function POST(req: Request) {
     return fail(e);
   }
 }
+
+export const POST = logged("turn", handler);

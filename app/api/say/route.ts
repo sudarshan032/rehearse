@@ -3,6 +3,7 @@ import { BotIn, Target, editBot, failEdit, readJSON } from "@/lib/edit";
 import { askJSON, LLMError } from "@/lib/llm";
 import { SAY_SYSTEM, sayUser } from "@/lib/prompts-edit";
 import { ALLOWED, INTENTS, STAGES, STAGE_DEFAULT, TABS, guessIntent, personaOf, wantsBuild, type Guess } from "@/lib/say";
+import { logged } from "@/lib/devlog";
 
 const Body = z.object({
   stage: z.enum(STAGES),
@@ -19,7 +20,7 @@ const Routed = z.object({
   answer: z.string().trim().max(400).optional().catch(undefined),
 });
 
-export async function POST(req: Request) {
+async function handler(req: Request) {
   const t0 = Date.now();
   const body = Body.safeParse(await readJSON(req));
   if (!body.success) return Response.json({ error: "I didn't catch that. Please say it again." }, { status: 400 });
@@ -61,3 +62,5 @@ export async function POST(req: Request) {
     return failEdit(e);
   }
 }
+
+export const POST = logged("say", handler);

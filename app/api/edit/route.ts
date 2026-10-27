@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { BotIn, Target, editBot, failEdit, readJSON } from "@/lib/edit";
+import { logged } from "@/lib/devlog";
 
 const Body = z.object({
   bot: BotIn,
@@ -7,7 +8,7 @@ const Body = z.object({
   instruction: z.string().trim().min(2).max(2000),
 });
 
-export async function POST(req: Request) {
+async function handler(req: Request) {
   const body = Body.safeParse(await readJSON(req));
   if (!body.success) {
     const botBad = body.error.issues.some((i) => i.path[0] === "bot");
@@ -20,3 +21,5 @@ export async function POST(req: Request) {
     return failEdit(e);
   }
 }
+
+export const POST = logged("edit", handler);

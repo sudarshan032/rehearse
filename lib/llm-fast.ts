@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import { LLMError } from "@/lib/llm";
+import { devlog } from "./devlog";
 
 export type Msg = { role: "system" | "user" | "assistant"; content: string };
 
@@ -29,6 +30,7 @@ export async function chatJSON<T extends z.ZodType>(messages: Msg[], schema: T):
     if (!key) continue;
     const model = p.model();
     for (let attempt = 0; attempt < 2; attempt++) {
+      const t0 = Date.now();
       try {
         const res = await fetch(p.url, {
           method: "POST",
@@ -44,6 +46,7 @@ export async function chatJSON<T extends z.ZodType>(messages: Msg[], schema: T):
         });
         if (!res.ok) {
           errs.push(`${p.name} answered ${res.status}`);
+          void devlog("llm-error", { provider: p.name, model: model, attempt, status: res.status, ms: Date.now() - t0, body: (await res.text().catch(() => "")).slice(0, 300) });
           // Free tiers limit tokens per minute: a short wait is faster than a weaker model.
           const wait = Number(res.headers.get("retry-after"));
           if (res.status === 429 && attempt === 0 && wait > 0 && wait <= 4) {
@@ -56,11 +59,16 @@ export async function chatJSON<T extends z.ZodType>(messages: Msg[], schema: T):
         const body = await res.json();
         const content = body.choices?.[0]?.message?.content ?? "";
         const parsed = schema.safeParse(JSON.parse(content));
-        if (parsed.success) return { data: parsed.data, llm: `${p.name}:${model}` };
+        if (parsed.success) {
+          void devlog("llm", { provider: p.name, model, attempt, ms: Date.now() - t0, tokens: body.usage?.total_tokens });
+          return { data: parsed.data, llm: `${p.name}:${model}` };
+        }
         if (process.env.NODE_ENV !== "production") console.warn("[turn] wrong shape:", content.slice(0, 300));
         errs.push(`${p.name} returned the wrong shape`);
+        void devlog("llm-bad-json", { provider: p.name, model: model, attempt, ms: Date.now() - t0 });
       } catch (e) {
         errs.push(`${p.name}: ${e instanceof Error ? e.name : "error"}`);
+        void devlog("llm-error", { provider: p.name, model: model, attempt, ms: Date.now() - t0, error: e instanceof Error ? `${e.name}: ${e.message}` : String(e) });
         if (e instanceof Error && e.name === "TimeoutError") break;
       }
     }

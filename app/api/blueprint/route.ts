@@ -2,6 +2,7 @@ import { z } from "zod";
 import { BotDraft, finishBot } from "@/lib/bot";
 import { askJSON, fail } from "@/lib/llm";
 import { BLUEPRINT_SYSTEM, blueprintUser } from "@/lib/prompts";
+import { logged } from "@/lib/devlog";
 
 const Body = z.object({
   id: z.string().max(40),
@@ -9,7 +10,7 @@ const Body = z.object({
   answers: z.array(z.object({ id: z.string().max(20), q: z.string().max(300), a: z.string().max(2000) })).max(12),
 });
 
-export async function POST(req: Request) {
+async function handler(req: Request) {
   const body = Body.safeParse(await req.json().catch(() => null));
   if (!body.success) return Response.json({ error: "The brief is missing." }, { status: 400 });
   try {
@@ -19,3 +20,5 @@ export async function POST(req: Request) {
     return fail(e);
   }
 }
+
+export const POST = logged("blueprint", handler);

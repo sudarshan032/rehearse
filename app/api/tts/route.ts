@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { TTS_LANGS, VOICES } from "@/lib/voices";
+import { logged } from "@/lib/devlog";
 
 // Paid voice, OFF by default: returns 503 unless PAID_VOICE=1. The free voice is lib/speak.ts (in the browser).
 // Murf Falcon 2.1 HTTP streaming: https://murf.ai/api/docs/api-reference/text-to-speech/stream
@@ -34,7 +35,7 @@ const MURF_ERRORS: Record<number, string> = {
   429: "Murf is busy. Try again in a few seconds.",
 };
 
-export async function POST(req: Request) {
+async function handler(req: Request) {
   if (process.env.PAID_VOICE !== "1")
     return Response.json({ error: "Paid voice (Murf) is off. The free in-browser voice is used instead." }, { status: 503 });
   const body = Body.safeParse(await req.json().catch(() => null));
@@ -114,3 +115,5 @@ function relay(reader: ReadableStreamDefaultReader<Uint8Array>, first: Uint8Arra
     cancel: (why) => reader.cancel(why),
   });
 }
+
+export const POST = logged("tts", handler);

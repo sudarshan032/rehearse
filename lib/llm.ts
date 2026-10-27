@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import { devlog } from "./devlog";
 
 // Free tiers only. Model names are config: change them in .env without touching code.
 const PROVIDERS = [
@@ -72,6 +73,7 @@ export async function askJSON<T extends z.ZodType>(
         });
         if (!res.ok) {
           errs.push(`${p.name} answered ${res.status}`);
+          void devlog("llm-error", { provider: p.name, model: p.model(), attempt, status: res.status, ms: Date.now() - t0, body: (await res.text().catch(() => "")).slice(0, 300) });
           // Free tiers limit tokens per minute: a short wait is faster than a weaker model.
           const wait = Number(res.headers.get("retry-after"));
           if (res.status === 429 && attempt === 0 && wait > 0 && wait <= 4) {
@@ -82,10 +84,15 @@ export async function askJSON<T extends z.ZodType>(
         }
         const body = await res.json();
         const parsed = schema.safeParse(JSON.parse(body.choices?.[0]?.message?.content ?? ""));
-        if (parsed.success) return { data: parsed.data, llm: `${p.name}:${p.model()}`, ms: Date.now() - t0 };
+        if (parsed.success) {
+          void devlog("llm", { provider: p.name, model: p.model(), attempt, ms: Date.now() - t0, tokens: body.usage?.total_tokens });
+          return { data: parsed.data, llm: `${p.name}:${p.model()}`, ms: Date.now() - t0 };
+        }
         errs.push(`${p.name} returned the wrong shape`);
+        void devlog("llm-bad-json", { provider: p.name, model: p.model(), attempt, ms: Date.now() - t0 });
       } catch (e) {
         errs.push(`${p.name}: ${e instanceof Error ? e.name : "error"}`);
+        void devlog("llm-error", { provider: p.name, model: p.model(), attempt, ms: Date.now() - t0, error: e instanceof Error ? `${e.name}: ${e.message}` : String(e) });
       }
     }
   }

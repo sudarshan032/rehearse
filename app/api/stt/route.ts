@@ -1,3 +1,4 @@
+import { logged } from "@/lib/devlog";
 // Speech to text. Default: Groq Whisper (free tier). Deepgram Nova-3 only when PAID_VOICE=1.
 // Groq: https://console.groq.com/docs/speech-to-text (OpenAI-compatible, multipart form)
 // Deepgram: https://developers.deepgram.com/reference/speech-to-text/listen-pre-recorded
@@ -13,7 +14,7 @@ const EXT: Record<string, string> = { "audio/webm": "webm", "audio/mp4": "m4a", 
 const tooBig = () => Response.json({ error: "That recording is too long. Keep each turn under 30 seconds." }, { status: 413 });
 const paid = () => process.env.PAID_VOICE === "1";
 
-export async function POST(req: Request) {
+async function handler(req: Request) {
   const key = paid() ? process.env.DEEPGRAM_API_KEY : process.env.GROQ_API_KEY;
   if (!key) return Response.json({ error: "Voice input is off: no speech-to-text key is set. Type your line instead." }, { status: 503 });
   if (Number(req.headers.get("content-length") ?? 0) > MAX_BYTES) return tooBig();
@@ -83,8 +84,11 @@ async function whisper(key: string, audio: ArrayBuffer, type: string, pin?: stri
   const text = String(j?.text ?? "").trim();
   // Whisper invents these on silence or noise: treat them as "heard nothing".
   const ghost = /^(thank you\.?|thanks for watching!?|you\.?|bye\.?|\.+)$/i.test(text);
+  // Whisper also writes words for breath, a cough or room noise; it says how likely a segment held no speech at all.
+  const segs: { no_speech_prob?: number }[] = Array.isArray(j?.segments) ? j.segments : [];
+  const silent = segs.length > 0 && segs.every((x) => (x.no_speech_prob ?? 0) > 0.6);
   const raw = String(j?.language ?? "").toLowerCase();
-  return { text: ghost ? "" : text, lang: WHISPER_LANG[raw] ?? pin, raw };
+  return { text: ghost || silent ? "" : text, lang: WHISPER_LANG[raw] ?? pin, raw };
 }
 
 async function deepgram(key: string, audio: ArrayBuffer, type: string, langs: string[]) {
@@ -102,3 +106,5 @@ async function deepgram(key: string, audio: ArrayBuffer, type: string, langs: st
   // languages[] is sorted by word count, so the first one is the main language of the turn.
   return { text: String(alt?.transcript ?? ""), lang: alt?.languages?.[0] as string | undefined };
 }
+
+export const POST = logged("stt", handler);

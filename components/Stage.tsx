@@ -196,6 +196,14 @@ export default function Stage() {
   const mainEl = useRef<HTMLElement>(null);
   // "More below": shown while the open screen has content under its bottom edge, so a cut-off line reads as "scroll", not as broken.
   const [more, setMore] = useState(false);
+  // Dev log: any crash in the page, with where it happened.
+  useEffect(() => {
+    const err = (e: ErrorEvent) => log("page-error", { msg: e.message, at: `${e.filename}:${e.lineno}`, stack: e.error?.stack?.split("\n").slice(0, 4).join(" | ") });
+    const rej = (e: PromiseRejectionEvent) => log("page-rejection", { msg: String(e.reason?.message ?? e.reason), stack: e.reason?.stack?.split("\n").slice(0, 4).join(" | ") });
+    addEventListener("error", err);
+    addEventListener("unhandledrejection", rej);
+    return () => (removeEventListener("error", err), removeEventListener("unhandledrejection", rej));
+  }, []);
   // The screens end where the input block begins: it grows when the "heard" line wraps or the hints wrap,
   // and nothing on a screen may slide under it.
   useEffect(() => {
@@ -426,6 +434,8 @@ export default function Stage() {
 
   // Records the first time a milestone happens for your own bots (not the sample).
   type Milestone = keyof NonNullable<Draft["times"]>;
+  // The bot's version when a rehearsal first broke a rule: a clean turn on a later version is "fixed + retested".
+  const brokeV = useRef<number | undefined>(undefined);
   const mark = (k: Milestone) =>
     setDraft((d) => {
       if (!d || d.id === SAMPLE_ID || d.times?.[k]) return d;
@@ -464,7 +474,10 @@ export default function Stage() {
     setScene(p);
     setVig("");
   }
-  const say = (q: string, res: string, extra?: { err?: boolean; ans?: boolean }) => setHeard({ q, res, ...extra });
+  const say = (q: string, res: string, extra?: { err?: boolean; ans?: boolean }) => {
+    log(extra?.err ? "shown-error" : "shown", { scene: sceneRef.current, res });
+    setHeard({ q, res, ...extra });
+  };
 
   async function run<T>(label: string, fn: () => Promise<T>): Promise<T | undefined> {
     setBusy(label);
@@ -483,6 +496,7 @@ export default function Stage() {
 
   // ---------- the journey ----------
   async function brief(t: string) {
+    brokeV.current = undefined;
     const t0 = Date.now();
     say(t, "Reading your brief…");
     const r = await run("Reading your brief", () => post<{ interview: Interview }>("/api/interview", { brief: t }));
@@ -594,9 +608,11 @@ export default function Stage() {
     );
     const checked = !!c && !(c as { ai_off?: boolean }).ai_off;
     mark("rehearsed");
-    if (c?.broken?.length) mark("broke");
+    if (c?.broken?.length) (mark("broke"), (brokeV.current ??= b.version));
+    else if (checked && brokeV.current !== undefined && b.version > brokeV.current) mark("fixed");
     const broken = c?.broken ?? [];
     const done = { ...line, broken, unchecked: !checked && !broken.length };
+    log("rehearse-turn", { bot: `${b.name} v${b.version}`, caller: t, reply: r.reply, step: r.step_id, ended: r.ended, broken: broken.map((x) => x.rule_id), checked });
     setLines([...mine, done]);
     if (broken.length) {
       const ri = b.rules.findIndex((x) => x.id === broken[0].rule_id);
@@ -827,6 +843,9 @@ export default function Stage() {
       if (!stt.text?.trim() && sr) stt.text = sr;
       log("call-heard", { text: stt.text, sr, call: callLang, lang: stt.lang, ms: stt.ms, bytes: audio.size });
       if (!stt.text?.trim()) return listen(c);
+      // An English call where the browser's English recogniser heard no words at all, but Whisper wrote Telugu/Hindi:
+      // that is noise or a "hmm" heard as Telugu letters, not a caller switching language.
+      if (callLang === "en" && srClass() && !sr && stt.lang && stt.lang !== "en") return log("call-ignored", { text: stt.text, why: "noise heard as another language" }), listen(c);
       const t1 = performance.now();
       c.history.push({ role: "caller", text: stt.text });
       setVlines([...c.history]);
@@ -850,6 +869,7 @@ export default function Stage() {
     if (!c || !bot) return;
     c.history.push({ role: "bot", text, step_id, ended });
     c.lang = ttsLang(text, bot); // the caller answers in the language the bot just used
+    log("call-bot", { bot: `${bot.name} v${bot.version}`, text, step: step_id, ended, lang: c.lang });
     setVlines([...c.history]);
     spokenRef.current = 0;
     setSpoken(0);
@@ -862,6 +882,7 @@ export default function Stage() {
         setSpoken(n);
       });
       if (t) setTiming({ hear: t[1] - t[0], think: t[2] - t[1], speak: sp.firstSoundMs, total: t[2] - t[0] + sp.firstSoundMs, left: sp.engine });
+      log("call-timing", { engine: sp.engine, firstSound: Math.round(sp.firstSoundMs), ...(t && { hear: Math.round(t[1] - t[0]), think: Math.round(t[2] - t[1]) }) });
       listenForCutIn(c, text, ttsLang(text, bot));
       await sp.done;
       if (c.phase === "speaking") c.sr?.abort();
@@ -945,7 +966,7 @@ export default function Stage() {
     if (backRe.test(t)) return back(), say(t, "Back");
     if (undoRe.test(t) && bot) return doUndo(t);
     if (/^(dark|light)( mode)?$/i.test(t)) return toggleTheme(t.toLowerCase().startsWith("dark") ? "dark" : "light");
-    if (scene === "fix" && replayRe.test(t)) return replay(t);
+    if ((scene === "fix" || (scene === "call" && /^replay/i.test(low))) && replayRe.test(low)) return replay(t);
     if (scene === "voice" && stopRe.test(t)) return callEnd();
     if (scene === "voice" && /^(turn off|no|stop|disable) (the )?(interruptions?|cutting in|cut in)$/.test(low)) return setBarge(false), say(t, "Interruptions off: the bot finishes every line");
     if (scene === "voice" && /^(turn on|allow|enable|let me) (the )?(interruptions?|interrupt|cut in|cutting in)$/.test(low)) return setBarge(true), say(t, "Interruptions on: talk over the bot to cut in");
@@ -1089,6 +1110,7 @@ export default function Stage() {
   }
 
   function open(d: Draft) {
+    brokeV.current = undefined;
     epoch.current++;
     clearSample();
     lastTurn.current = "";
