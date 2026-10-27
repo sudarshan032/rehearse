@@ -21,7 +21,7 @@ On my own bot, the first rule break showed up 3.1 minutes after the brief, befor
 
 I built it the same way: every prompt to Claude Code was spoken with Wispr Flow. [CARD WORDS] words dictated.
 
-Demo (1:55): [YOUTUBE LINK]
+Demo (1:55): https://youtu.be/u4y-gDxb1ZQ
 Try it, no sign-in: https://rehearse-ecru.vercel.app
 Code: https://github.com/sudarshan032/rehearse
 

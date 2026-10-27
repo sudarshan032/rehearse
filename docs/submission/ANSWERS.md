@@ -4,7 +4,7 @@ Form: https://www.wemakedevs.org/wispr/submit (sign in first). Fields come from 
 Siddhu on 24 Oct). **No editing after Submit**, so fill every `[ ]` first. Plan: submit Fri 30 Oct, spare day Sat 31 Oct.
 
 Marks used below:
-- **[YOUTUBE LINK]**: paste the unlisted YouTube link of `2-founder-cut.mp4`.
+- **Video link:** https://youtu.be/u4y-gDxb1ZQ
 - **[CARD WORDS]**: the total from the Wispr usage card (Insights > Your usage), taken on submit day.
 - **(not verified)**: I could not check this myself. Check it before you paste.
 
@@ -24,7 +24,7 @@ Builders, for developers
 
 ### Demo video link
 ```
-[YOUTUBE LINK]
+https://youtu.be/u4y-gDxb1ZQ
 ```
 Checks: unlisted, opens in a private window, length in the player is 1:55 (under 2:00), YouTube auto captions on.
 Paste the music credit from `video/out/README.md` into the description (this cut uses "Inspired" by Kevin MacLeod, CC BY 4.0).
@@ -64,7 +64,7 @@ mistake you saw in Wispr if you remember one, or delete that sentence.
 ## Before you press Submit (30 Oct)
 
 - [ ] Repo made public; `git log -p | grep -iE "gsk_|api_key|token"` is clean
-- [ ] README: replace `VIDEO_URL` with the YouTube link; add the usage card image
+- [x] README video link added. [ ] README: add the usage card image
 - [ ] Usage card screenshot taken and uploaded; [CARD WORDS] filled in "About the project"
 - [ ] Live link and video opened in a private window, and on the phone
 - [ ] Every field read aloud once

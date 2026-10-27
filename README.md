@@ -3,7 +3,7 @@
 **Talk your voice bot into shape, then call it before your customers do.**
 Build, rehearse and fix a phone voice agent just by speaking, in Telugu, Hindi or English.
 
-[Try it live, no sign-in →](https://rehearse-ecru.vercel.app) · [Demo video (1:50)](VIDEO_URL) · Builders track, No Hands: The Wispr Challenge
+[Try it live, no sign-in →](https://rehearse-ecru.vercel.app) · [Demo video (1:55)](https://youtu.be/u4y-gDxb1ZQ) · Builders track, No Hands: The Wispr Challenge
 
 **Who it's for:** me, an AI engineer who builds voice bots for Indian businesses, and anyone who knows how a call
 should go but doesn't want to write prompts or drag boxes.

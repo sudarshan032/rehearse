@@ -2,7 +2,7 @@
 title: "I stopped finding voice bot bugs on real calls. Now I rehearse them by voice."
 published: false
 tags: nohandschallenge, wisprflow, wemakedevs, voiceai
-cover_image: [COVER IMAGE: a frame from the demo video, the red rule-break line]
+cover_image: https://img.youtube.com/vi/u4y-gDxb1ZQ/maxresdefault.jpg
 ---
 
 At work I build phone voice bots for small businesses in India. They call people in English, Hindi and Telugu.
@@ -11,7 +11,7 @@ The bots are not hard to build. The hard part is finding where they break.
 For No Hands: The Wispr Challenge by WeMakeDevs and Wispr Flow, I built **Rehearse**: a tool where you build,
 rehearse and fix a voice bot just by speaking.
 
-Video (1:55): [YOUTUBE LINK]
+{% embed https://youtu.be/u4y-gDxb1ZQ %}
 Try it, no sign-in: https://rehearse-ecru.vercel.app
 Code: https://github.com/sudarshan032/rehearse
 
