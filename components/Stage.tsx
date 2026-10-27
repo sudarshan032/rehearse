@@ -98,7 +98,7 @@ const JOURNEY: { s: Scene; name: string; sub?: boolean; re: RegExp }[] = [
   { s: "stack", name: "Stack & speed", sub: true, re: /\b(stack|speed)\b/ },
   { s: "call", name: "Rehearse", re: /\b(rehears\w*|call|practice)\b/ },
   { s: "fix", name: "Changes", re: /\b(fix(es)?|changes|history|versions?)\b/ },
-  { s: "voice", name: "Voice test", re: /\bvoice( te[sx]t)?\b/ },
+  { s: "voice", name: "Voice test", re: /\bvoice( te[sx]t| trust| tests?)?\b/ },
   { s: "export", name: "Export", re: /\b(export|download)\b/ },
   { s: "bots", name: "My bots", re: /\b(my bots|all bots|bots)\b/ },
   { s: "proof", name: "Proof", re: /\b(proof|results?|before and after)\b/ },
@@ -860,6 +860,10 @@ export default function Stage() {
       // Whisper pinned to the call's language hears Telugu/Hindi well; the browser's recogniser fills in when it hears nothing.
       const sr = c.srText?.trim();
       if (!stt.text?.trim() && sr) stt.text = sr;
+      // English call: the browser's English recogniser heard clear English words, but Whisper wrote Telugu/Hindi
+      // letters ("yeah tell me" → "యా తలేక్"). Trust the English words.
+      else if (callLang === "en" && sr && /^[\x00-\x7F]+$/.test(sr) && sr.split(/\s+/).length >= 2 && /[\u0900-\u0C7F]/.test(stt.text ?? ""))
+        [stt.text, stt.lang] = [sr, "en"];
       log("call-heard", { text: stt.text, sr, call: callLang, lang: stt.lang, ms: stt.ms, bytes: audio.size });
       if (!stt.text?.trim()) return listen(c);
       // An English call where the browser's English recogniser heard no words at all, but Whisper wrote Telugu/Hindi:
@@ -992,6 +996,7 @@ export default function Stage() {
     if (scene === "voice" && /^(turn off|no|stop|disable) (the )?(interruptions?|cutting in|cut in)$/.test(low)) return setBarge(false), say(t, "Interruptions off: the bot finishes every line");
     if (scene === "voice" && /^(turn on|allow|enable|let me) (the )?(interruptions?|interrupt|cut in|cutting in)$/.test(low)) return setBarge(true), say(t, "Interruptions on: talk over the bot to cut in");
     if (scene === "voice" && /^(start|begin|ring|make)( the| a)? call$|^(start|call me|call)$/i.test(low)) return void callStart();
+    if ((scene === "call" || scene === "fix") && /^((re)?start|begin)( the| a)?( new)? (call|rehearsal)$|^call again$/.test(low)) return startCall(t);
     if (/^(stop|end|hang up|cut)( the)? call[.!]?$|^hang up[.!]?$/i.test(t))
       return scene === "call" || scene === "fix" ? (clearSample(), stopSpeaking(), go("call"), setReport(true), say(t, "Call stopped. Here is how it went.")) : say(t, "No call is running right now.");
     // For docs/results.md: a table of every own bot's measured times, ready to paste.

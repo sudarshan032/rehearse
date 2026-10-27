@@ -47,6 +47,7 @@ Same brief as the "before" bot, rewritten without client details.
 | Date | Bot | Built (min) | First test call | First rule break caught | Fixed + retested | Exported | Changes |
 |---|---|---|---|---|---|---|---|
 | 2026-10-26 | Booking App Trial Upgrade Bot (the trial-expiry agent, rebuilt by voice) | 1.7 | 2.6 | 3.1 | (not recorded: timing bug, fixed 27 Oct) | (run stopped before export) | 2 |
+| 2026-10-27 | Booking App Sales Bot (same brief, after the call fixes) | 0.8 | 1.2 | none: the bot kept every rule through the same caller lines | – | – | 0 |
 
 ## Result
 

@@ -68,9 +68,10 @@ async function whisper(key: string, audio: ArrayBuffer, type: string, pin?: stri
   form.append("model", "whisper-large-v3-turbo");
   form.append("response_format", "verbose_json");
   if (pin) form.append("language", pin);
-  // One example line in the call's language only: an example in a second script leaks that script into the text.
-  const SAMPLE: Record<string, string> = { te: "సరే, నాకు ఇప్పుడు కొంచెం టైం ఉంది.", hi: "ठीक है, अभी मेरे पास थोड़ा टाइम है।", en: "Okay, I have a minute now." };
-  form.append("prompt", SAMPLE[pin ?? "en"] ?? SAMPLE.en);
+  // For Telugu/Hindi, a few words in the script nudge Whisper to write that script. No full sentence: Whisper
+  // sometimes "hears" the prompt sentence itself on a short or unclear turn. No prompt for English.
+  const SCRIPT: Record<string, string> = { te: "సరే, ప్లాన్, డెమో.", hi: "ठीक है, प्लान, डेमो।" };
+  if (pin && SCRIPT[pin]) form.append("prompt", SCRIPT[pin]);
   form.append("temperature", "0");
   const res = await fetch(GROQ_URL, {
     method: "POST",
