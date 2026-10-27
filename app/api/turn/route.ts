@@ -70,11 +70,17 @@ async function handler(req: Request) {
   }
 
   try {
-    const { data, llm } = await chatJSON(messages, Reply);
+    let { data, llm } = await chatJSON(messages, Reply);
+    // A lone "okay" or "hmm" is an answer, never a goodbye: if the model hung up on one, ask it once more.
+    const bare = end?.role === "caller" && /^(ok(ay)?|hmm+|mm+|yes|yeah|sure|fine|right|సరే|హా|ఊ|ఓకే|ठीक है|हाँ|हां|अच्छा|ओके)[\s.!,।]*$/i.test(end.text.trim());
+    if (data.ended && bare) {
+      messages.push({ role: "assistant", content: JSON.stringify(data) }, { role: "user", content: "(Do not end the call: the caller only acknowledged. Answer as if they said yes to your last question, or ask what else they need.)" });
+      ({ data, llm } = await chatJSON(messages, Reply).catch(() => ({ data: { ...data, ended: false }, llm })));
+    }
     const ids = bot.flow.steps.map((s) => s.id);
     const last = lines.findLast((l) => l.role === "bot" && l.step_id && ids.includes(l.step_id))?.step_id ?? ids[0];
     const step_id = ids.find((id) => id.toLowerCase() === data.step_id.toLowerCase()) ?? last;
-    return Response.json({ reply: short(data.reply), step_id, ended: data.ended, ms: Date.now() - t0, llm });
+    return Response.json({ reply: short(data.reply), step_id, ended: data.ended && !bare, ms: Date.now() - t0, llm });
   } catch (e) {
     return fail(e);
   }

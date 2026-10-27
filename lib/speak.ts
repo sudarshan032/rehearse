@@ -198,7 +198,7 @@ function stopAll() {
 
 // Short sentence pieces, so the first one is ready fast and the rest are made while it plays.
 function sentences(text: string) {
-  return (text.match(/[^.!?]+[.!?]*/g) ?? []).map((s) => s.trim()).filter((s) => /\p{L}|\p{N}/u.test(s));
+  return (text.match(/[^.!?।]+[.!?।]*/g) ?? []).map((s) => s.trim()).filter((s) => /\p{L}|\p{N}/u.test(s));
 }
 
 // Queue one clip right after the previous one, so the pieces play without gaps.

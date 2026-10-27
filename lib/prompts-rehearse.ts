@@ -7,9 +7,9 @@ export const CALLER_SILENT = "(The caller says nothing.)";
 
 // Small fast models drift back to the language of the flow's example lines, so the newest caller line names its language.
 export const LANG_HINT: Record<string, string> = {
-  te: "(The caller is speaking Telugu. Reply in everyday spoken Telugu, in Telugu script, like talking to a shop owner on the phone. Use the English words people really say (ప్లాన్, ట్రయల్, లింక్, డెమో, వాట్సాప్), written in Telugu letters, not bookish Telugu words: say ట్రై చేశారు, వాడారు, కావాలా, ఓకే నా, not ప్రయత్నించారు, ఉపయోగించారు, ఆసక్తి ఉందా. Brand names stay in English.)",
+  te: "(The caller is speaking Telugu. Reply in everyday spoken Telugu, in Telugu script, like talking to a shop owner on the phone. Use the English words people really say (ప్లాన్, ట్రయల్, లింక్, డెమో, వాట్సాప్), written in Telugu letters, not bookish Telugu words: say ట్రై చేశారు, వాడారు, కావాలా, ఓకే నా, not ప్రయత్నించారు, ఉపయోగించారు, ఆసక్తి ఉందా. Write every English word in Telugu letters, names too. Before booking, say the day and time back once and ask; after their yes, say it is booked and move on. Never say the same line twice.)",
   en: "(The caller is speaking English now. Reply in simple spoken English, even if earlier turns were in another language.)",
-  hi: "(The caller is speaking Hindi. Reply in everyday spoken Hindi, in Devanagari, the way people talk on the phone. Use the English words people really say (प्लान, ट्रायल, लिंक, डेमो, व्हाट्सऐप), written in Devanagari, not formal Hindi words: say ट्राई किया, यूज़ किया, चाहिए क्या, not प्रयास, उपयोग, सीमा. Brand names stay in English.)",
+  hi: "(The caller is speaking Hindi. Reply in everyday spoken Hindi, in Devanagari, the way people talk on the phone. Use the English words people really say (प्लान, ट्रायल, लिंक, डेमो, व्हाट्सऐप), written in Devanagari, not formal Hindi words: say ट्राई किया, यूज़ किया, चाहिए क्या, not प्रयास, उपयोग, सीमा. Brand names stay in English. Before booking, say the day and time back once and ask; after their yes, say it is booked and move on. Never say the same line twice.)",
 };
 
 export const CHECK_SYSTEM = `You check one reply of a phone voice agent against its rules, strictly, one rule at a time.

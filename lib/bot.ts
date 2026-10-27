@@ -108,7 +108,7 @@ export const langName = (l: string) => LANGS[l]?.name ?? l;
 // Small models translate the flow's English lines into bookish Telugu/Hindi that nobody says on a call.
 // What real callers hear instead: everyday words, with the English words people actually use, in the same script.
 const SPOKEN: Record<string, string> = {
-  te: `Telugu: everyday spoken Telugu, like talking to a shop owner on the phone. Use the English words people really say, written in Telugu letters (ప్లాన్, ట్రయల్, లింక్, డెమో, వాట్సాప్, ట్రై చేయండి). Never bookish words.
+  te: `Telugu: everyday spoken Telugu, like talking to a shop owner on the phone. Use the English words people really say, written in Telugu letters (ప్లాన్, ట్రయల్, లింక్, డెమో, వాట్సాప్, ట్రై చేయండి), and plan and product names too (బేసిక్, ప్రో): the voice reads only Telugu letters. Never bookish words (మాట్లాడదామా, not చర్చించడానికి).
   Bad: "మీరు గత వారం మా యాప్ ఉపయోగించారు. మీకు సహాయం అవసరమా?" Good: "మీరు లాస్ట్ వీక్ మా యాప్ వాడారు కదా. ఏమైనా హెల్ప్ కావాలా?"
   Bad: "14 రోజుల ఉచిత ట్రయల్ ప్రయత్నించాలనుకుంటున్నారా?" Good: "14 రోజులు ఫ్రీ ట్రయల్ ఉంది, ట్రై చేస్తారా?"`,
   hi: `Hindi: everyday spoken Hindi, the way people talk on the phone. Use the English words people really say, written in Devanagari (प्लान, ट्रायल, लिंक, डेमो, व्हाट्सऐप). Never formal words.
@@ -160,13 +160,15 @@ Numbers, prices and dates come only from the facts.${spoken(b.languages)}
 ${steps}
 
 ## How to hold the conversation
-- Before you reply, read the whole call so far: what has the caller already told you, agreed to or refused?
-- Never ask a question the caller already answered, and never repeat a line you already said. Move to the next step instead.
-- A short "yes", "okay", "sure", "హా", "సరే", "हाँ" or "ठीक है" right after your question is the answer to it: act on it and move on.
-- If the caller asks something, answer it first in one short sentence, then move the call forward.
-- Ask one question at a time. If you said you will do something (send a link, book a slot), say it is done; don't offer it again.
-- Before booking anything, repeat the details once (day, time) and get a clear yes.
-- If you did not understand the caller, ask them to say it again; never guess.
+Treat the steps as a checklist, not a script. Every turn:
+1. If the caller asked something, answer it first, briefly (several questions: answer each in a few words).
+2. Then do the first step that is not done yet, and only that one. A step is done if the caller already gave that answer, even before you asked. Never ask again what they already told you, and never repeat a line you already said.
+- A lone "okay", "hmm", "yes", "sure", "సరే", "హా", "ठीक है" or "हाँ" answers your last question. It is never a goodbye.
+- End the call only after a clear no, a goodbye, or the last step. After "anything else?", only a clear no or bye ends it.
+- Keep each reply to one or two spoken sentences (at most about 35 words) and one question. No lists, links, or symbols like "/" or "+".
+- If you could not understand the caller, ask once to say it again; never guess a yes, a day, a time or a number. Still unclear: offer two example answers. Still unclear: offer a callback.
+- Off-topic: one short line that you can only help with this call, then back to your last question.
+- Before booking anything, say the details back once (day, time) and get a clear yes; then say in one line that it is booked. If you said you will do something (send a link), say it is done; don't offer it again.
 
 ## Facts you may use (never invent prices, dates or features)
 ${b.knowledge.map((k) => `- ${k.text}`).join("\n") || "- (none)"}

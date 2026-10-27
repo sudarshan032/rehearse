@@ -21,6 +21,14 @@ type Call = {
   phase: "listening" | "thinking" | "speaking"; since: number; lang: string;
   sr?: InstanceType<SRClass>; srText?: string; loud?: boolean; loudSince?: number; turnStart?: number;
   pcm: { t: number; d: Float32Array }[];
+  quiet?: number; // silence reprompts in a row
+};
+// Said when the caller stays silent: fixed lines, since model-written ones sound odd in Telugu. 8 s, then once more, then goodbye.
+const QUIET_MS = 8000;
+const STILL_THERE: Record<string, [string, string]> = {
+  te: ["హలో, మీరు లైన్‌లో ఉన్నారా?", "సరే, తర్వాత మళ్ళీ కాల్ చేస్తాను. థాంక్యూ, బై!"],
+  hi: ["हैलो, क्या आप लाइन पर हैं?", "ठीक है, मैं बाद में फिर कॉल करूँगी। धन्यवाद, बाय!"],
+  en: ["Hello, are you still there?", "Okay, I'll call you back later. Thank you, bye!"],
 };
 const srClass = () =>
   typeof window === "undefined" ? undefined
@@ -702,7 +710,7 @@ export default function Stage() {
   }
 
   // The mic loop for the whole call.
-  // ponytail: energy-based turn taking (pause of 750 ms ends your turn); swap in a VAD model if rooms are noisy.
+  // ponytail: energy-based turn taking (a pause of 600 ms ends your turn); swap in a VAD model if rooms are noisy.
   function watch(c: Call) {
     const buf = new Float32Array(c.an.fftSize);
     let floor = 0.006, voiced = 0, lastVoice = 0, prev = performance.now(), echo = 0, phase = c.phase, lastLog = 0;
@@ -725,10 +733,10 @@ export default function Stage() {
             if (!voiced) c.turnStart = undefined;
           }
         }
-        if (voiced > 350 && now - lastVoice > 750) {
+        if (voiced > 350 && now - lastVoice > 600) {
           voiced = 0;
           endTurn(c, lastVoice);
-        }
+        } else if (!voiced && !c.turnStart && !c.srText && now - Math.max(c.since, lastVoice) > QUIET_MS) void stillThere(c);
       } else if (c.phase === "speaking" && bargeRef.current) {
         // The bot's own voice comes back through the mic; only a voice clearly louder than that counts as you.
         c.loud = rms > Math.max(0.03, echo * 1.15, floor * 4);
@@ -738,7 +746,7 @@ export default function Stage() {
         if (now - c.since < 350 || rms < Math.max(0.04, echo * 1.6, floor * 4)) {
           echo = Math.max(echo * 0.995, rms);
           voiced = Math.max(0, voiced - dt);
-        } else if ((voiced += dt) > 250) {
+        } else if ((voiced += dt) > 400) { // 0.4 s of real speech: a cough or a "hm" doesn't stop the bot
           log("call-barge", { by: "loudness", rms: +rms.toFixed(3), echo: +echo.toFixed(3) });
           interrupt(c);
           lastVoice = now;
@@ -751,6 +759,17 @@ export default function Stage() {
       raf.current = requestAnimationFrame(tick);
     };
     tick();
+  }
+
+  async function stillThere(c: Call) {
+    c.phase = "thinking";
+    c.quiet = (c.quiet ?? 0) + 1;
+    const [ask, bye] = STILL_THERE[c.lang.slice(0, 2)] ?? STILL_THERE.en;
+    log("call-silence", { n: c.quiet });
+    await botSays(c.quiet === 1 ? ask : bye, c.history.findLast((l) => l.role === "bot")?.step_id ?? "", c.quiet > 1);
+    if (call.current !== c) return;
+    if (c.quiet > 1) return callEnd("The caller stayed silent, so the bot ended the call");
+    listen(c);
   }
 
   function listen(c: Call, from?: number) {
@@ -847,6 +866,7 @@ export default function Stage() {
       // that is noise or a "hmm" heard as Telugu letters, not a caller switching language.
       if (callLang === "en" && srClass() && !sr && stt.lang && stt.lang !== "en") return log("call-ignored", { text: stt.text, why: "noise heard as another language" }), listen(c);
       const t1 = performance.now();
+      c.quiet = 0;
       c.history.push({ role: "caller", text: stt.text });
       setVlines([...c.history]);
       setInterim("");
