@@ -6,6 +6,8 @@ Siddhu on 24 Oct). **No editing after Submit**, so fill every `[ ]` first. Plan:
 Marks used below:
 - **Video link:** https://youtu.be/u4y-gDxb1ZQ
 - **Wispr words:** 61,952 over 2 weeks, 110 wpm (from the Wispr app, given by Sudarshan on 27 Oct).
+- **Blog (dev.to, published 28 Oct):** https://dev.to/sudarshan032/i-stopped-finding-voice-bot-bugs-on-real-calls-now-i-rehearse-them-by-voice-2l9m
+- **LinkedIn post (published 28 Oct):** https://www.linkedin.com/posts/sudarshansastry_nohandschallenge-nohandschallenge-wisprflow-share-7520940328674078720-W7Wn/ (short link: https://lnkd.in/p/d8Wk52HW). Put it in the weekly check-in.
 - **(not verified)**: I could not check this myself. Check it before you paste.
 
 ---
@@ -46,7 +48,9 @@ Check: the repo must be public before you submit, or this link is a dead end for
 ## Part 2. How you used Wispr Flow
 
 ### Usage card (image upload)
-**[USAGE CARD SCREENSHOT: not taken yet]**
+**Official Wispr screenshot: not taken yet.** A stand-in card we made is at `docs/submission/usage-card.png`
+(61,952 words, 2 weeks, 110 wpm; it says it is not a Wispr screenshot). It is in the blog and on the site. Upload the
+real Wispr screenshot to the form if you can take it; use the stand-in only if the form accepts it.
 Take it on submit day: Wispr Flow desktop app > Insights > Your usage. Crop out your email if it shows.
 Save it as `docs/submission/usage-card.png` too, so the README can show the same image.
 For reference only (not the official number): the local Wispr history on this Mac shows **52,690 words in 598
@@ -64,8 +68,12 @@ mistake you saw in Wispr if you remember one, or delete that sentence.
 ## Before you press Submit (30 Oct)
 
 - [ ] Repo made public; `git log -p | grep -iE "gsk_|api_key|token"` is clean
-- [x] README video link added. [ ] README: add the usage card image
-- [ ] Usage card screenshot taken and uploaded; 61,952 filled in "About the project"
+- [x] YouTube video uploaded, link in README and posts
+- [x] dev.to blog published, with the usage card image
+- [x] LinkedIn post published
+- [x] 61,952 filled in "About the project"
+- [ ] Real Wispr usage screenshot taken (Insights > Your usage) and uploaded
+- [ ] Wispr feedback: replace or delete the "Whisper" / "free trail" sentence
 - [ ] Live link and video opened in a private window, and on the phone
 - [ ] Every field read aloud once
 - [ ] Screenshot of the filled form saved (not committed)
