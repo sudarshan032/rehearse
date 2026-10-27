@@ -168,6 +168,8 @@ export default function Stage() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState("");
+  const [winKey, setWinKey] = useState(false); // Wispr's default key: fn on a Mac, Ctrl+Win on Windows
+  useEffect(() => setWinKey(/win/i.test(navigator.platform)), []);
   const [heard, setHeard] = useState<{ q: string; res: string; err?: boolean; ans?: boolean } | null>(null);
   const [panel, setPanel] = useState(true);
   const [ix, setIx] = useState(0);
@@ -1668,6 +1670,8 @@ export default function Stage() {
               onScroll={(e) => hl.current && (hl.current.scrollTop = e.currentTarget.scrollTop)}
               placeholder={busy ? `${busy}…` : PLACEHOLDER[scene] ?? "Say what to do…"} aria-label="Talk or type to Rehearse" autoFocus />
           </div>
+          {/* Wispr Flow types into whatever has focus, so the box keeps focus and says which key to hold. */}
+          {!text && <span className="wkey" aria-hidden>Hold {winKey ? <><kbd>Ctrl</kbd><kbd>Win</kbd></> : <kbd>fn</kbd>} to talk · or type</span>}
           <button className={`send ${counting ? "count" : ""}`} onClick={() => handle(text)} aria-label="Send">
             <I d={IC.up} w={2.4} />
             <svg className="cring" viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" /></svg>

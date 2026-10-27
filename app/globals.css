@@ -260,6 +260,9 @@ main{position:fixed;top:64px;left:0;right:0;bottom:var(--mic-h,192px)}
 .send{position:relative;width:42px;height:42px;border-radius:11px;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;flex:none}
 .cring{position:absolute;inset:-5px;width:52px;height:52px;transform:rotate(-90deg);pointer-events:none} .cring circle{fill:none;stroke:var(--accent);stroke-width:2.5;stroke-linecap:round;stroke-dasharray:151;stroke-dashoffset:151;opacity:0}
 .send.count .cring circle{opacity:1;animation:count 1.25s linear forwards}
+.wkey{align-self:center;display:flex;align-items:center;gap:5px;font:500 12px var(--mono);color:var(--faint);white-space:nowrap;margin-right:4px}
+.wkey kbd{font:600 11px var(--mono);padding:2px 7px;border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;color:var(--ink);background:var(--raise)}
+@media (max-width:700px){.wkey{display:none}}
 .tries{display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;min-height:26px;transition:opacity .3s} .tries::-webkit-scrollbar{display:none}
 .tries .lbl{font:500 12px var(--mono);text-transform:uppercase;letter-spacing:.1em;color:var(--faint);margin-right:4px;white-space:nowrap}
 .hint{font:400 15px var(--body);color:var(--muted);padding:3px 9px;border-radius:7px;white-space:nowrap;transition:.2s} .hint:hover{color:var(--ink);background:var(--chip)}
