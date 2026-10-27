@@ -69,12 +69,12 @@ I built Rehearse the same way it works: by speaking. I held the Wispr key and to
 reviewed every change. Specs, plans, commit messages and this post were dictated too. I still used the keyboard for
 shortcuts and small fixes.
 
-My Wispr usage card shows **[CARD WORDS] words** for the challenge. The local history on my Mac counted 52,690 words
+My Wispr Flow app shows **61,952 words** dictated over 2 weeks, at **110 words per minute**. The local history on my Mac counted 52,690 words
 in 598 dictations from 23 to 27 Oct, and 34,635 of them went straight into the terminal. My longest single
 dictation was a 1,611-word build brief. I would never have typed that much detail, and the extra detail is what
 made the first try right more often.
 
-[USAGE CARD SCREENSHOT]
+![My Wispr Flow usage: 61,952 words, 2 weeks, 110 words per minute](https://rehearse-ecru.vercel.app/usage-card.png)
 
 ## Why voice fits this job
 

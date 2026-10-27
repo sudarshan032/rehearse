@@ -19,7 +19,7 @@ The workflow:
 
 On my own bot, the first rule break showed up 3.1 minutes after the brief, before any caller. Before, that took about 3 weeks.
 
-I built it the same way: every prompt to Claude Code was spoken with Wispr Flow. [CARD WORDS] words dictated.
+I built it the same way: every prompt to Claude Code was spoken with Wispr Flow. 61,952 words dictated in 2 weeks, at 110 words per minute.
 
 Demo (1:55): https://youtu.be/u4y-gDxb1ZQ
 Try it, no sign-in: https://rehearse-ecru.vercel.app

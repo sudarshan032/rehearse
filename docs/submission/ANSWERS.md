@@ -5,7 +5,7 @@ Siddhu on 24 Oct). **No editing after Submit**, so fill every `[ ]` first. Plan:
 
 Marks used below:
 - **Video link:** https://youtu.be/u4y-gDxb1ZQ
-- **[CARD WORDS]**: the total from the Wispr usage card (Insights > Your usage), taken on submit day.
+- **Wispr words:** 61,952 over 2 weeks, 110 wpm (from the Wispr app, given by Sudarshan on 27 Oct).
 - **(not verified)**: I could not check this myself. Check it before you paste.
 
 ---
@@ -37,7 +37,7 @@ Opens with no sign-in. A sample bot is ready on the first screen: click "Watch a
 
 ### About the project (about 120 words)
 ```
-At work I build phone voice bots in Telugu, Hindi and English. One sales bot went live in a day but took about 3 weeks of real and test calls before it stopped breaking its rules, because every break was found by callers. Rehearse is for people like me who build voice bots: you describe the bot by speaking, it asks a few questions and draws the call flow, rules and prompt, then you rehearse calls by voice. A broken rule turns red, you say the fix, and the same caller line is replayed. On my own bot, the first rule break showed up 3.1 minutes after the brief. I built it by dictating every prompt to Claude Code with Wispr Flow: [CARD WORDS] words. Repo: https://github.com/sudarshan032/rehearse
+At work I build phone voice bots in Telugu, Hindi and English. One sales bot went live in a day but took about 3 weeks of real and test calls before it stopped breaking its rules, because every break was found by callers. Rehearse is for people like me who build voice bots: you describe the bot by speaking, it asks a few questions and draws the call flow, rules and prompt, then you rehearse calls by voice. A broken rule turns red, you say the fix, and the same caller line is replayed. On my own bot, the first rule break showed up 3.1 minutes after the brief. I built it by dictating every prompt to Claude Code with Wispr Flow: 61,952 words. Repo: https://github.com/sudarshan032/rehearse
 ```
 Check: the repo must be public before you submit, or this link is a dead end for judges.
 
@@ -65,7 +65,7 @@ mistake you saw in Wispr if you remember one, or delete that sentence.
 
 - [ ] Repo made public; `git log -p | grep -iE "gsk_|api_key|token"` is clean
 - [x] README video link added. [ ] README: add the usage card image
-- [ ] Usage card screenshot taken and uploaded; [CARD WORDS] filled in "About the project"
+- [ ] Usage card screenshot taken and uploaded; 61,952 filled in "About the project"
 - [ ] Live link and video opened in a private window, and on the phone
 - [ ] Every field read aloud once
 - [ ] Screenshot of the filled form saved (not committed)
