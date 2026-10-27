@@ -43,3 +43,6 @@ public/models/kitten/
 
 # Claude Code local state
 .claude/
+*.m4a
+*.mkv
+video/out/
