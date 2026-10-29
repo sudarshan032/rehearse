@@ -14,8 +14,10 @@ should go but doesn't want to write prompts or drag boxes.
 |---|---|
 | **Before (my real work, Sep–Oct 2026)** | 7 voice agents, 22 live bots in 3 languages. One sales bot went live in 1 day but took about 3 weeks and about 87 prompt saves before it stopped breaking rules. Every break was found only after calls: about 61 hands-on hours, 58 recordings reviewed by hand. ([how I measured](docs/results.md)) |
 | **After (Rehearse)** | Same kind of bot, rebuilt by voice: built in 1.7 min, first rule break caught in a rehearsal 3.1 min after the brief, before any caller. ([timings](docs/results.md)) |
-| **Wispr usage** | 52,690 words in 598 dictations, 23–27 Oct, from the Wispr history on my Mac; the official usage card goes here on 30 Oct ([daily log](docs/voice-log.md)) |
+| **Wispr usage** | Official Wispr Flow card (29 Oct): **53,441 words dictated, 127 words per minute, 6-day streak, 11 apps** (card below, [daily log](docs/voice-log.md)) |
 | **Built by voice** | Every prompt to Claude Code and most commit messages were dictated with Wispr Flow |
+
+<p><img src="docs/submission/flow-highlights-2026-10-29.png" alt="Wispr Flow usage card: 53,441 words dictated, 127 words per minute, 6-day streak, 11 apps" width="49%"> <img src="docs/submission/where-you-flow-2026-10-29.png" alt="Wispr Flow: where I dictated, 549 other tasks, 28 AI prompts, 1 work message" width="49%"></p>
 
 ## Try it in one minute
 
