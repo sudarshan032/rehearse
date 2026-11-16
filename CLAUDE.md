@@ -23,7 +23,7 @@ Read at the start of every session: `docs/RULES.md`, `docs/RUBRIC.md`, `docs/PLA
 ## Hard rules
 
 - Never modify, move or delete anything outside this folder.
-- `/Users/siddh/Downloads/graph_hacks/` is **read-only**. Never copy files from it into this repo.
+- `/Users/siddh/Downloads/hackathons/graph_hacks/` is **read-only**. Never copy files from it into this repo.
 - Never touch `~/Movies` except to read or copy from it.
 - Wispr Flow's local data (`~/Library/Application Support/Wispr Flow/`) is read-only: read a copy only, never commit it.
 - Never delete data, tokens, credentials or accounts.

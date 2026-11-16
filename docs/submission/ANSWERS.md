@@ -58,22 +58,21 @@ dictations, 23–27 Oct**. 34,635 of those went into Terminal (Claude Code), 12,
 
 ### Feedback on Wispr Flow (about 90 words)
 ```
-I used Flow for almost all my writing in this challenge: every prompt to Claude Code, specs, commit messages and these answers. My longest single dictation was a 1,611-word build brief, which I would never have typed. It handles my mix of English with Hindi and Telugu words better than I expected, and it pastes cleanly into Terminal. What went wrong: it sometimes spelled product words its own way ("Whisper" for Wispr, "free trail" for free trial) (not verified). A request: a per-app word count in Insights, so I could show how much went into my code tool.
+I used Flow for almost all my writing in this challenge: every prompt to Claude Code, specs, commit messages and these answers. My longest single dictation was a 1,611-word build brief, which I would never have typed. It handles my mix of English with Hindi and Telugu words better than I expected, and it pastes cleanly into Terminal. What went wrong: it spelled some voice-tool names its own way, like "Murph AI" for Murf AI and "Serverman" or "Serum" for Sarvam. A request: a per-app word count in Insights, so I could show how much went into my code tool.
 ```
-The misheard-word examples come from the recording's transcript, not from Wispr's own output. Swap in a real
-mistake you saw in Wispr if you remember one, or delete that sentence.
+The misheard words are real: they are in Wispr's own history on this Mac (checked 29 Oct, from a copy).
 
 ---
 
 ## Before you press Submit (30 Oct)
 
-- [ ] Repo made public; `git log -p | grep -iE "gsk_|api_key|token"` is clean
+- [x] Repo made public; `git log -p | grep -iE "gsk_|api_key|token"` is clean
 - [x] YouTube video uploaded, link in README and posts
 - [x] dev.to blog published, with the usage card image
 - [x] LinkedIn post published
 - [x] 61,952 filled in "About the project"
 - [ ] Real Wispr usage screenshot taken (Insights > Your usage) and uploaded
-- [ ] Wispr feedback: replace or delete the "Whisper" / "free trail" sentence
+- [x] Wispr feedback: misheard-word examples replaced with real ones from the Wispr history
 - [ ] Live link and video opened in a private window, and on the phone
 - [ ] Every field read aloud once
 - [ ] Screenshot of the filled form saved (not committed)
